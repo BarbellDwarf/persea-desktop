@@ -57,8 +57,7 @@ const POLL_INTERVAL_MS: u64 = 1000;
 static APP: OnceLock<AppHandle> = OnceLock::new();
 /// Labels that already carry the drag handler; pruned when the window
 /// disappears so a reopened window with the same label re-attaches.
-static ATTACHED: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ATTACHED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 /// The session window a drag last entered (used when the drop lands on
 /// the overlay itself, a Wayland fallback).
 static LAST_TARGET: Mutex<Option<String>> = Mutex::new(None);
