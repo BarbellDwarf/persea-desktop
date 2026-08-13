@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 static CONFIG: Mutex<Option<Arc<Mutex<ShellConfig>>>> = Mutex::new(None);
 

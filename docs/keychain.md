@@ -1,4 +1,4 @@
-# Keychain (wayfinder/v1.2.0/D06)
+# Keychain
 
 The desktop shell stores the paired API token (D07) and optional saved
 credentials through the OS keychain. There is no official Tauri plugin

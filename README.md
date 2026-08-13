@@ -8,7 +8,7 @@ persea instance (BYO server).
 Current state: D01 scaffold with the D03 navigation lockdown in place.
 The window opens and shows a placeholder shell page; instance
 management, pairing, tray and the other desktop features land in later
-tickets (tracked in the parent repository under `wayfinder/v1.2.0/`).
+Planned and tracked locally; implementation notes live in the repository history.
 
 ## Repo layout
 

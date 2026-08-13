@@ -4,8 +4,8 @@
 //! Instances are a shell concept only (research 04-shell-integration.md
 //! §5): there is no server-side instance registry. The store lives at
 //! `app_config_dir()/instances.json` and is the single source of truth
-//! for D07 (pairing), D08 (tray), D11 (transfers), D12 (kiosk) and D19
-//! (provisioning merge, which takes over this module after D02).
+//! for the pairing flow, the tray, transfers, kiosk and the
+//! provisioning merge (which takes over this module later).
 //!
 //! Server-gating rule (locked design): every consumer gates on what the
 //! cached probe reports via [`capability`]. No probe, no capability: the
@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 /// Timeout for a single probe HTTP request.
 pub const PROBE_TIMEOUT_SECS: u64 = 6;
@@ -38,7 +39,7 @@ pub struct Instance {
     pub url: String,
     #[serde(default)]
     pub default: bool,
-    /// Per-instance kiosk preference; D12 consumes it. Optional so older
+    /// Per-instance kiosk preference, consumed by the kiosk mode. Optional so older
     /// configs and provisioned entries stay valid.
     #[serde(
         default,
@@ -46,7 +47,7 @@ pub struct Instance {
         rename = "kioskAllowed"
     )]
     pub kiosk_allowed: Option<bool>,
-    /// D19 provisioning: locked entries cannot be edited or removed by
+    /// Provisioning: locked entries cannot be edited or removed by
     /// the user. The settings UI must hide edit/remove for them.
     #[serde(default, skip_serializing_if = "is_false")]
     pub locked: bool,
@@ -141,7 +142,7 @@ impl InstanceStore {
                 }),
                 Err(e) => {
                     // Never crash on a corrupt config: back it up and
-                    // start empty (startup resilience, D02 review gap).
+                    // start empty (startup resilience).
                     let backup = path.with_extension("json.corrupt");
                     let _ = std::fs::rename(path, &backup);
                     eprintln!(
@@ -211,7 +212,7 @@ impl InstanceStore {
     }
 
     /// Remove an instance, clearing last-used when it pointed at it.
-    /// Locked entries (D19 provisioning) are refused.
+    /// Locked entries (provisioning) are refused.
     pub fn remove(&mut self, url: &str) -> Result<(), StoreError> {
         let idx = self
             .index_of(url)
@@ -269,7 +270,7 @@ fn with_store<R>(f: impl FnOnce(&mut InstanceStore) -> R) -> Option<R> {
     Some(f(&mut store))
 }
 
-/// Snapshot of every configured instance (D08 tray, settings).
+/// Snapshot of every configured instance (tray, settings).
 pub fn instances() -> Vec<Instance> {
     with_store(|s| s.file.instances.clone()).unwrap_or_default()
 }
@@ -299,7 +300,7 @@ pub fn last_known_version(instance_url: &str) -> Option<String> {
 /// the cached probe reports. Fails closed when the store is uninitialized,
 /// the instance is unknown, or no probe has ever succeeded.
 ///
-/// Keys consumed by other tickets: `kiosk_allowed` (D12), `desktop_transfers`
+/// Keys consumed by other features: `kiosk_allowed`, `desktop_transfers`
 /// (D11), `desktop_pairing` (D07), plus `drive_upload`, `session_events`,
 /// `drive_api`, `desktop_bridge` for settings display.
 pub fn capability(instance_url: &str, key: &str) -> bool {
@@ -687,10 +688,11 @@ pub async fn cmd_instances_add(name: String, url: String) -> Result<InstanceView
     if store.index_of(&url).is_some() {
         return Err(format!("An instance with URL {url} already exists"));
     }
+    let is_default = store.file.instances.is_empty();
     store.file.instances.push(Instance {
         name,
         url: url.clone(),
-        default: store.file.instances.is_empty(),
+        default: is_default,
         kiosk_allowed: None,
         locked: false,
         probe: Some(outcome),

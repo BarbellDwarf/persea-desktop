@@ -1,4 +1,4 @@
-//! OS keychain module (wayfinder/v1.2.0/D06).
+//! OS keychain module.
 //!
 //! Thin Tauri commands over the keyring v4 ecosystem for the local shell:
 //!
@@ -299,7 +299,7 @@ fn build_store(tier: KeyringTier, data_dir: &Path) -> Result<Arc<CredentialStore
 /// db-keystore file. The key is generated randomly on first use and kept
 /// next to the database with 0600 permissions.
 ///
-/// Decision (wayfinder/v1.2.0/D06): the key cannot be derived from the
+/// Decision: the key cannot be derived from the
 /// pairing token, because the pairing token is the credential this store
 /// protects (chicken-and-egg), and no passphrase prompt exists in the D06
 /// shell scope. A random per-install key protects the file against casual

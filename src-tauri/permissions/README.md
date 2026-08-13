@@ -1,4 +1,4 @@
-# App-command permissions (wayfinder/v1.2.0/D06)
+# App-command permissions
 
 This directory holds the ACL definitions that gate the keyring commands.
 The shell must list the commands in the app manifest for the gate to

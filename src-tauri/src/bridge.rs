@@ -1,4 +1,4 @@
-//! Scoped remote-origin IPC bridge for persea pages (wayfinder/v1.2.0/D04).
+//! Scoped remote-origin IPC bridge for persea pages.
 //!
 //! Tauri 2 gates remote-origin IPC by capability only: a capability with
 //! `remote.urls` matching the page origin grants its permissions to that

@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
-use tauri::{Runtime, Url, WebviewWindowBuilder};
+use tauri::{Manager, Runtime, Url, WebviewWindowBuilder};
 
 /// What the webview is allowed to do with a navigation attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,10 +148,10 @@ pub fn new_window_handler<R: Runtime>(
 
 /// Wires both handlers onto a window builder. The handlers take ownership
 /// of the policy, so clone it when sharing one policy across windows.
-pub fn lock_window_builder<R: Runtime>(
-    builder: WebviewWindowBuilder<R>,
+pub fn lock_window_builder<'a, R: Runtime, M: Manager<R>>(
+    builder: WebviewWindowBuilder<'a, R, M>,
     policy: NavigationPolicy,
-) -> WebviewWindowBuilder<R> {
+) -> WebviewWindowBuilder<'a, R, M> {
     builder
         .on_navigation(navigation_handler(policy.clone()))
         .on_new_window(new_window_handler(policy))
