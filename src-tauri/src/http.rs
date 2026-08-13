@@ -672,16 +672,14 @@ mod tests {
 
     #[test]
     fn bootstrap_gives_up_after_max_attempts() {
-        let server = MockServer::start(MockScript {
-            responses: vec![MockResponse {
-                status: 500,
-                reason: "Internal Server Error",
-                headers: Vec::new(),
-                body: "{\"error\":\"boom\"}".to_string(),
-            }],
-            repeat_last: true,
-            ..Default::default()
-        });
+        let mut script = MockScript::new(vec![MockResponse {
+            status: 500,
+            reason: "Internal Server Error",
+            headers: Vec::new(),
+            body: "{\"error\":\"boom\"}".to_string(),
+        }]);
+        script.repeat_last = true;
+        let server = MockServer::start(script);
         let http = ShellHttp::new();
         let err = tauri::async_runtime::block_on(async {
             http.bootstrap(&server.url()).await.expect_err("must fail")
@@ -692,11 +690,9 @@ mod tests {
 
     #[test]
     fn response_without_csrf_cookie_fails_bootstrap() {
-        let server = MockServer::start(MockScript {
-            responses: vec![ok_json("{}")],
-            repeat_last: true,
-            ..Default::default()
-        });
+        let mut script = MockScript::new(vec![ok_json("{}")]);
+        script.repeat_last = true;
+        let server = MockServer::start(script);
         let http = ShellHttp::new();
         let err = tauri::async_runtime::block_on(async {
             http.bootstrap(&server.url()).await.expect_err("must fail")
