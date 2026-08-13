@@ -94,6 +94,15 @@ pub struct StoreFile {
     pub instances: Vec<Instance>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "lastUsed")]
     pub last_used: Option<String>,
+    /// SHA-256 (hex) of the canonical serialization of the last applied
+    /// provision document. Unchanged hash = the merge is skipped (no
+    /// writes, no churn). Written by [`sync_provisioned`].
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "provisionedHash"
+    )]
+    pub provisioned_hash: Option<String>,
 }
 
 #[derive(Debug)]
@@ -237,17 +246,153 @@ impl InstanceStore {
 }
 
 // ---------------------------------------------------------------------------
+// Provisioning merge (locked design)
+// ---------------------------------------------------------------------------
+
+/// Outcome of one provision merge, for logging.
+#[derive(Debug, Default, PartialEq)]
+pub struct ProvisionMerge {
+    pub added: usize,
+    pub updated: usize,
+    pub removed: usize,
+}
+
+impl ProvisionMerge {
+    pub fn changed(&self) -> bool {
+        self.added > 0 || self.updated > 0 || self.removed > 0
+    }
+}
+
+impl InstanceStore {
+    /// Merge a provision document into the store (locked design):
+    ///
+    /// - ADD: provision entries whose URL is not yet present (locked)
+    /// - UPDATE: name/default of locked entries matching a provision URL
+    /// - REMOVE: locked entries whose URL is no longer provisioned
+    /// - user-added (unlocked) entries are never touched; a provisioned
+    ///   default clears every other default so the store keeps one
+    ///
+    /// URL changes arrive as REMOVE (old URL) + ADD (new URL): entries are
+    /// keyed by URL, matching the store's uniqueness invariant. A
+    /// user-owned entry holding a provisioned URL is left alone.
+    pub fn apply_provisioned(
+        &mut self,
+        provision: &crate::provisioning::ProvisionFile,
+    ) -> ProvisionMerge {
+        let mut merge = ProvisionMerge::default();
+        let mut provisioned_default: Option<String> = None;
+
+        // Phase 1: ADD new + UPDATE changed, matched by URL.
+        for p in &provision.instances {
+            match self.index_of(&p.url) {
+                Some(idx) if self.file.instances[idx].locked => {
+                    let inst = &mut self.file.instances[idx];
+                    if inst.name != p.name {
+                        inst.name = p.name.clone();
+                        merge.updated += 1;
+                    }
+                    if inst.default != p.default {
+                        inst.default = p.default;
+                        merge.updated += 1;
+                    }
+                    inst.locked = true;
+                    if p.default {
+                        provisioned_default = Some(p.url.clone());
+                    }
+                }
+                Some(_) => {
+                    // User-owned entry holds the URL: never touched.
+                }
+                None => {
+                    self.file.instances.push(Instance {
+                        name: p.name.clone(),
+                        url: p.url.clone(),
+                        default: p.default,
+                        kiosk_allowed: None,
+                        locked: true,
+                        probe: None,
+                    });
+                    merge.added += 1;
+                    if p.default {
+                        provisioned_default = Some(p.url.clone());
+                    }
+                }
+            }
+        }
+
+        // Phase 2: REMOVE deleted provisioned entries (locked entries
+        // whose URL is no longer in the source).
+        let before = self.file.instances.len();
+        self.file
+            .instances
+            .retain(|i| !i.locked || provision.instances.iter().any(|p| p.url == i.url));
+        merge.removed = before - self.file.instances.len();
+        if merge.removed > 0 {
+            if let Some(lu) = &self.file.last_used {
+                if !self.file.instances.iter().any(|i| i.url == *lu) {
+                    self.file.last_used = None;
+                }
+            }
+        }
+
+        // Phase 3: a provisioned default wins; clear every other default
+        // so the store keeps a single default.
+        if let Some(def) = provisioned_default {
+            for i in &mut self.file.instances {
+                if i.url != def && i.default {
+                    i.default = false;
+                    merge.updated += 1;
+                }
+            }
+        }
+
+        merge
+    }
+}
+
+/// Re-sync hook, called from [`setup`] before the store is published:
+/// applies the effective provision document when its content hash
+/// changed since the last application. Unchanged hash = no writes, no
+/// churn. No active provision source = no-op (removing a source does not
+/// unlock previously applied entries).
+pub fn sync_provisioned(store: &mut InstanceStore) -> Result<(), StoreError> {
+    let Some(effective) = crate::provisioning::effective() else {
+        return Ok(());
+    };
+    if store.file.provisioned_hash.as_deref() == Some(effective.hash.as_str()) {
+        return Ok(());
+    }
+    let merge = store.apply_provisioned(&effective.doc);
+    store.file.provisioned_hash = Some(effective.hash.clone());
+    store.save()?;
+    if merge.changed() {
+        eprintln!(
+            "persea-desktop: provision applied (source: {}): {} added, {} updated, {} removed",
+            effective.source, merge.added, merge.updated, merge.removed
+        );
+    } else {
+        eprintln!(
+            "persea-desktop: provision source changed without instance changes (source: {})",
+            effective.source
+        );
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Process-global access
 // ---------------------------------------------------------------------------
 
 /// Initialize the process global from an app instance. Called by the
-/// dispatcher from `lib.rs run()` via the setup hook.
+/// dispatcher from `lib.rs run()` via the setup hook. The provisioning
+/// source must have been resolved already (`provisioning::setup` runs
+/// first): this is where the provision merge lands.
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let config_dir = app.path().app_config_dir()?;
     std::fs::create_dir_all(&config_dir)?;
-    let store = Arc::new(Mutex::new(InstanceStore::load(
-        &config_dir.join("instances.json"),
-    )?));
+    let mut store = InstanceStore::load(&config_dir.join("instances.json"))?;
+    sync_provisioned(&mut store)?;
+    let store = Arc::new(Mutex::new(store));
     *STORE.lock().unwrap() = Some(store.clone());
     refresh_probes_in_background(store.clone());
     auto_open(app, &store);
@@ -717,8 +862,11 @@ pub async fn cmd_instances_update(
         let store = handle
             .lock()
             .map_err(|_| "instance store is locked".to_string())?;
-        if store.index_of(&url).is_none() {
-            return Err(format!("No instance with URL {url}"));
+        let idx = store
+            .index_of(&url)
+            .ok_or_else(|| format!("No instance with URL {url}"))?;
+        if store.file.instances[idx].locked {
+            return Err("This instance is locked by your administrator".to_string());
         }
         if let Some(n) = name.as_deref() {
             if n.trim().is_empty() {
@@ -777,6 +925,9 @@ pub fn cmd_instances_set_default(url: String) -> Result<(), String> {
         let idx = s
             .index_of(&url)
             .ok_or_else(|| format!("No instance with URL {url}"))?;
+        if s.file.instances[idx].locked {
+            return Err("This instance is locked by your administrator".to_string());
+        }
         for i in &mut s.file.instances {
             i.default = false;
         }
@@ -1062,5 +1213,193 @@ mod tests {
         assert!(store.remove("https://persea.example.com").is_err());
         assert_eq!(store.file.instances.len(), 1);
         assert!(store.remove("https://nope.example.com").is_err());
+    }
+
+    fn provision(entries: &[(&str, &str, bool)]) -> crate::provisioning::ProvisionFile {
+        crate::provisioning::ProvisionFile {
+            instances: entries
+                .iter()
+                .map(
+                    |(name, url, default)| crate::provisioning::ProvisionedInstance {
+                        name: name.to_string(),
+                        url: url.to_string(),
+                        default: *default,
+                    },
+                )
+                .collect(),
+            kiosk: crate::provisioning::ProvisionedKiosk::default(),
+            settings: serde_json::Value::Null,
+        }
+    }
+
+    fn locked_store() -> InstanceStore {
+        let mut store = InstanceStore::empty(tmp_store_path("provision"));
+        store.file.instances.push(Instance {
+            name: "User".into(),
+            url: "https://user.example.com".into(),
+            default: false,
+            kiosk_allowed: None,
+            locked: false,
+            probe: None,
+        });
+        store.file.instances.push(Instance {
+            name: "Old name".into(),
+            url: "https://a.example.com".into(),
+            default: true,
+            kiosk_allowed: None,
+            locked: true,
+            probe: None,
+        });
+        store
+    }
+
+    #[test]
+    fn provision_merge_adds_updates_removes_and_locks() {
+        let mut store = locked_store();
+
+        let merge = store.apply_provisioned(&provision(&[
+            ("New name", "https://a.example.com", false),
+            ("B", "https://b.example.com", false),
+        ]));
+        assert_eq!(merge.added, 1);
+        assert_eq!(merge.removed, 0);
+        assert!(merge.updated >= 2);
+        assert!(merge.changed());
+
+        let a = store.find("https://a.example.com").unwrap();
+        assert_eq!(a.name, "New name");
+        assert!(!a.default);
+        assert!(a.locked);
+        let b = store.find("https://b.example.com").unwrap();
+        assert!(b.locked);
+        assert!(!b.default);
+        let user = store.find("https://user.example.com").unwrap();
+        assert_eq!(user.name, "User");
+        assert!(!user.locked);
+
+        // Second doc removes A: the locked entry goes, user stays.
+        store.file.last_used = Some("https://a.example.com".into());
+        let merge = store.apply_provisioned(&provision(&[("B", "https://b.example.com", false)]));
+        assert_eq!(merge.removed, 1);
+        assert!(store.find("https://a.example.com").is_none());
+        assert!(store.find("https://b.example.com").is_some());
+        assert!(store.find("https://user.example.com").is_some());
+        assert!(store.file.last_used.is_none());
+
+        // Unchanged doc: no-op merge.
+        let merge = store.apply_provisioned(&provision(&[("B", "https://b.example.com", false)]));
+        assert!(!merge.changed());
+    }
+
+    #[test]
+    fn provision_merge_never_touches_user_entries() {
+        let mut store = locked_store();
+        // User owns https://user.example.com; provision tries to take it over.
+        let merge = store.apply_provisioned(&provision(&[
+            ("User", "https://user.example.com", true),
+            ("B", "https://b.example.com", false),
+        ]));
+        assert_eq!(merge.added, 1);
+        let user = store.find("https://user.example.com").unwrap();
+        assert_eq!(user.name, "User");
+        assert!(!user.locked);
+        assert!(!user.default);
+    }
+
+    #[test]
+    fn provisioned_default_clears_user_default() {
+        let mut store = locked_store();
+        store.file.instances[0].default = true;
+        let merge = store.apply_provisioned(&provision(&[("A", "https://a.example.com", true)]));
+        assert!(merge.changed());
+        let defaults: Vec<&str> = store
+            .file
+            .instances
+            .iter()
+            .filter(|i| i.default)
+            .map(|i| i.url.as_str())
+            .collect();
+        assert_eq!(defaults, vec!["https://a.example.com"]);
+    }
+
+    #[test]
+    fn provision_resync_is_idempotent_on_unchanged_hash() {
+        let path = tmp_store_path("resync");
+        let mut store = locked_store();
+        store.path = path.clone();
+        store.save().unwrap();
+        let bytes_before = std::fs::read(&path).unwrap();
+
+        let doc = provision(&[("A", "https://a.example.com", true)]);
+        crate::provisioning::set_active_for_tests(Some(crate::provisioning::EffectiveProvision {
+            doc: doc.clone(),
+            hash: "hash-v1".into(),
+            source: "test".into(),
+        }));
+
+        // First sync applies and persists the hash.
+        sync_provisioned(&mut store).unwrap();
+        assert_eq!(store.file.instances.len(), 2);
+        assert_eq!(store.file.provisioned_hash.as_deref(), Some("hash-v1"));
+        let after_first = std::fs::read(&path).unwrap();
+        assert_ne!(after_first, bytes_before);
+
+        // Unchanged hash: no writes, no churn.
+        sync_provisioned(&mut store).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), after_first);
+
+        // No active source: no-op, no writes.
+        crate::provisioning::set_active_for_tests(None);
+        sync_provisioned(&mut store).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), after_first);
+
+        // Changed doc: merge applies and the hash advances.
+        let doc2 = provision(&[
+            ("A", "https://a.example.com", true),
+            ("C", "https://c.example.com", false),
+        ]);
+        crate::provisioning::set_active_for_tests(Some(crate::provisioning::EffectiveProvision {
+            doc: doc2,
+            hash: "hash-v2".into(),
+            source: "test".into(),
+        }));
+        sync_provisioned(&mut store).unwrap();
+        assert_eq!(store.file.provisioned_hash.as_deref(), Some("hash-v2"));
+        assert!(store.find("https://c.example.com").is_some());
+        assert_ne!(std::fs::read(&path).unwrap(), after_first);
+
+        crate::provisioning::set_active_for_tests(None);
+    }
+
+    #[test]
+    fn locked_entries_refuse_edits_through_commands() {
+        let store = Arc::new(Mutex::new(locked_store()));
+        *STORE.lock().unwrap() = Some(store.clone());
+        let locked = "https://a.example.com";
+        let user = "https://user.example.com";
+
+        let res = cmd_instances_set_default(locked.to_string());
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("locked by your administrator"));
+
+        let res = tauri::async_runtime::block_on(cmd_instances_update(
+            locked.to_string(),
+            Some("Renamed".to_string()),
+            None,
+        ));
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("locked by your administrator"));
+
+        let res = cmd_instances_remove(locked.to_string());
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("locked by your administrator"));
+
+        let res = cmd_instances_set_default(user.to_string());
+        assert!(res.is_ok());
+        let store = store.lock().unwrap();
+        assert!(store.find(user).unwrap().default);
+        assert!(store.find(locked).is_some());
+
+        *STORE.lock().unwrap() = None;
     }
 }
