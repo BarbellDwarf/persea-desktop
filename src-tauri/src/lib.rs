@@ -1,7 +1,11 @@
 mod bridge;
+mod hotkeys;
+mod http;
 mod instances;
 mod keyring;
 mod navigation;
+mod pairing;
+mod provisioning;
 mod shell_config;
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
@@ -11,6 +15,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
+            // Provisioning BEFORE the instance store: the merge consumes
+            // the resolved provision document, and the store's startup
+            // re-sync applies it before probes and auto-open.
+            provisioning::setup(app)?;
+
             // Theme first: shell pages render with it.
             shell_config::setup(app)?;
 
@@ -20,8 +29,17 @@ pub fn run() {
             // window does not exist; we navigate after building it below.)
             instances::setup(app)?;
 
+            // Global shortcuts: the plugin only on platforms that support
+            // it (Wayland no-ops otherwise); bare Builder so a conflicted
+            // chord can never block startup.
+            if hotkeys::platform_supported() {
+                app.handle()
+                    .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
+            }
+            hotkeys::setup(app)?;
+
             // The main window is code-built: on_navigation and
-            // on_new_window are build-time-only in tauri 2.11 (D03), so a
+            // on_new_window are build-time-only in tauri 2.11, so a
             // config-declared window can never carry the lockdown
             // handlers. The window opens on the local welcome page;
             // auto-open then navigates to the default/last instance.
@@ -70,6 +88,15 @@ pub fn run() {
             keyring::keyring_get,
             keyring::keyring_delete,
             keyring::keyring_tier,
+            hotkeys::cmd_hotkeys_get_settings,
+            hotkeys::cmd_hotkeys_set_shortcut,
+            pairing::pairing_supported,
+            pairing::pairing_start,
+            pairing::pairing_status,
+            pairing::pairing_cancel,
+            pairing::pairing_open_confirm_page,
+            pairing::pairing_list_tokens,
+            pairing::pairing_revoke,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persea Desktop");
@@ -117,8 +144,8 @@ mod tests {
 
     #[test]
     fn main_window_is_code_built_not_config_declared() {
-        // D03: on_navigation/on_new_window are build-time-only, so the
-        // main window is constructed in lib.rs setup() and must NOT be
+        // on_navigation/on_new_window are build-time-only, so the main
+        // window is constructed in lib.rs setup() and must NOT be
         // declared in tauri.conf.json.
         let cfg = load_config();
         assert!(

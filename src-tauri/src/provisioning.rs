@@ -323,8 +323,7 @@ fn read_registry(key_path: &str, value_name: &str) -> ReadOutcome {
         // First pass: size only (the value type is validated below).
         let mut value_type = std::mem::zeroed();
         let mut len: u32 = 0;
-        let status =
-            RegQueryValueExW(key, name, None, Some(&mut value_type), None, Some(&mut len));
+        let status = RegQueryValueExW(key, name, None, Some(&mut value_type), None, Some(&mut len));
         if status == ERROR_FILE_NOT_FOUND {
             RegCloseKey(key);
             return ReadOutcome::Absent;
@@ -356,10 +355,7 @@ fn read_registry(key_path: &str, value_name: &str) -> ReadOutcome {
             .chunks_exact(2)
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
-        let chars: Vec<u16> = chars
-            .into_iter()
-            .take_while(|&c| c != 0)
-            .collect();
+        let chars: Vec<u16> = chars.into_iter().take_while(|&c| c != 0).collect();
         match String::from_utf16(&chars) {
             Ok(text) => ReadOutcome::Data(text.into_bytes()),
             Err(e) => ReadOutcome::Failure(format!("registry value is not valid UTF-16: {e}")),
@@ -436,7 +432,10 @@ pub fn is_active() -> bool {
 /// default applies). Kiosk mode applies the pin and blocks user override
 /// while it is set.
 pub fn kiosk_enabled_override() -> Option<bool> {
-    ACTIVE.lock().ok().and_then(|a| a.as_ref()?.doc.kiosk.enabled)
+    ACTIVE
+        .lock()
+        .ok()
+        .and_then(|a| a.as_ref()?.doc.kiosk.enabled)
 }
 
 /// Locked shell-settings override for one key, when the provision
@@ -478,19 +477,79 @@ pub(crate) fn set_active_for_tests(active: Option<EffectiveProvision>) {
 
 fn sha256_hex(data: &[u8]) -> String {
     const K: [u32; 64] = [
-        0x428a_2f98, 0x7137_4491, 0xb5c0_fbcf, 0xe9b5_dba5, 0x3956_c25b, 0x59f1_11f1, 0x923f_82a4,
-        0xab1c_5ed5, 0xd807_aa98, 0x1283_5b01, 0x2431_85be, 0x550c_7dc3, 0x72be_5d74, 0x80de_b1fe,
-        0x9bdc_06a7, 0xc19b_f174, 0xe49b_69c1, 0xefbe_4786, 0x0fc1_9dc6, 0x240c_a1cc, 0x2de9_2c6f,
-        0x4a74_84aa, 0x5cb0_a9dc, 0x76f9_88da, 0x983e_5152, 0xa831_c66d, 0xb003_27c8, 0xbf59_7fc7,
-        0xc6e0_0bf3, 0xd5a7_9147, 0x06ca_6351, 0x1429_2967, 0x27b7_0a85, 0x2e1b_2138, 0x4d2c_6dfc,
-        0x5338_0d13, 0x650a_7354, 0x766a_0abb, 0x81c2_c92e, 0x9272_2c85, 0xa2bf_e8a1, 0xa81a_664b,
-        0xc24b_8b70, 0xc76c_51a3, 0xd192_e819, 0xd699_0624, 0xf40e_3585, 0x106a_a070, 0x19a4_c116,
-        0x1e37_6c08, 0x2748_774c, 0x34b0_bcb5, 0x391c_0cb3, 0x4ed8_aa4a, 0x5b9c_ca4f, 0x682e_6ff3,
-        0x748f_82ee, 0x78a5_636f, 0x84c8_7814, 0x8cc7_0208, 0x90be_fffa, 0xa450_6ceb, 0xbef9_a3f7,
+        0x428a_2f98,
+        0x7137_4491,
+        0xb5c0_fbcf,
+        0xe9b5_dba5,
+        0x3956_c25b,
+        0x59f1_11f1,
+        0x923f_82a4,
+        0xab1c_5ed5,
+        0xd807_aa98,
+        0x1283_5b01,
+        0x2431_85be,
+        0x550c_7dc3,
+        0x72be_5d74,
+        0x80de_b1fe,
+        0x9bdc_06a7,
+        0xc19b_f174,
+        0xe49b_69c1,
+        0xefbe_4786,
+        0x0fc1_9dc6,
+        0x240c_a1cc,
+        0x2de9_2c6f,
+        0x4a74_84aa,
+        0x5cb0_a9dc,
+        0x76f9_88da,
+        0x983e_5152,
+        0xa831_c66d,
+        0xb003_27c8,
+        0xbf59_7fc7,
+        0xc6e0_0bf3,
+        0xd5a7_9147,
+        0x06ca_6351,
+        0x1429_2967,
+        0x27b7_0a85,
+        0x2e1b_2138,
+        0x4d2c_6dfc,
+        0x5338_0d13,
+        0x650a_7354,
+        0x766a_0abb,
+        0x81c2_c92e,
+        0x9272_2c85,
+        0xa2bf_e8a1,
+        0xa81a_664b,
+        0xc24b_8b70,
+        0xc76c_51a3,
+        0xd192_e819,
+        0xd699_0624,
+        0xf40e_3585,
+        0x106a_a070,
+        0x19a4_c116,
+        0x1e37_6c08,
+        0x2748_774c,
+        0x34b0_bcb5,
+        0x391c_0cb3,
+        0x4ed8_aa4a,
+        0x5b9c_ca4f,
+        0x682e_6ff3,
+        0x748f_82ee,
+        0x78a5_636f,
+        0x84c8_7814,
+        0x8cc7_0208,
+        0x90be_fffa,
+        0xa450_6ceb,
+        0xbef9_a3f7,
         0xc671_78f2,
     ];
     let mut h: [u32; 8] = [
-        0x6a09_e667, 0xbb67_ae85, 0x3c6e_f372, 0xa54f_f53a, 0x510e_527f, 0x9b05_688c, 0x1f83_d9ab,
+        0x6a09_e667,
+        0xbb67_ae85,
+        0x3c6e_f372,
+        0xa54f_f53a,
+        0x510e_527f,
+        0x9b05_688c,
+        0x1f83_d9ab,
         0x5be0_cd19,
     ];
 
@@ -506,12 +565,8 @@ fn sha256_hex(data: &[u8]) -> String {
         let mut w = [0u32; 64];
         for (i, word) in w.iter_mut().take(16).enumerate() {
             let off = i * 4;
-            *word = u32::from_be_bytes([
-                chunk[off],
-                chunk[off + 1],
-                chunk[off + 2],
-                chunk[off + 3],
-            ]);
+            *word =
+                u32::from_be_bytes([chunk[off], chunk[off + 1], chunk[off + 2], chunk[off + 3]]);
         }
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
@@ -525,7 +580,11 @@ fn sha256_hex(data: &[u8]) -> String {
         for i in 0..64 {
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             let ch = (e & f) ^ (!e & g);
-            let t1 = hh.wrapping_add(s1).wrapping_add(ch).wrapping_add(K[i]).wrapping_add(w[i]);
+            let t1 = hh
+                .wrapping_add(s1)
+                .wrapping_add(ch)
+                .wrapping_add(K[i])
+                .wrapping_add(w[i]);
             let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             let maj = (a & b) ^ (a & c) ^ (b & c);
             let t2 = s0.wrapping_add(maj);
@@ -585,14 +644,16 @@ mod tests {
     }
 
     fn tmp_path(tag: &str, name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "persea-desktop-provision-test-{tag}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        )).join(name)
+        std::env::temp_dir()
+            .join(format!(
+                "persea-desktop-provision-test-{tag}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ))
+            .join(name)
     }
 
     #[test]
@@ -613,7 +674,8 @@ mod tests {
 
     #[test]
     fn parse_and_validate_accepts_full_document() {
-        let doc = parse_and_validate(serde_json::to_vec(&sample_doc()).unwrap().as_slice()).unwrap();
+        let doc =
+            parse_and_validate(serde_json::to_vec(&sample_doc()).unwrap().as_slice()).unwrap();
         assert_eq!(doc.instances.len(), 2);
         assert_eq!(doc.kiosk.enabled, Some(true));
         assert_eq!(doc.settings["appearance"], "dark");
@@ -675,7 +737,10 @@ mod tests {
                 .as_bytes(),
         )
         .unwrap();
-        assert_ne!(hash_a, sha256_hex(serde_json::to_string(&doc_c).unwrap().as_bytes()));
+        assert_ne!(
+            hash_a,
+            sha256_hex(serde_json::to_string(&doc_c).unwrap().as_bytes())
+        );
     }
 
     #[test]
@@ -783,7 +848,10 @@ mod tests {
         set_active_for_tests(Some(eff.clone()));
         assert!(is_active());
         assert_eq!(kiosk_enabled_override(), Some(true));
-        assert_eq!(settings_override("appearance"), Some(serde_json::json!("dark")));
+        assert_eq!(
+            settings_override("appearance"),
+            Some(serde_json::json!("dark"))
+        );
         assert_eq!(settings_override("nope"), None);
         assert_eq!(settings_overrides().len(), 1);
         assert_eq!(effective().unwrap().hash, eff.hash);

@@ -161,7 +161,8 @@ impl ShellHttp {
         bearer: Option<&str>,
         body: Option<Value>,
     ) -> Result<HttpResult, String> {
-        self.send(Method::PUT, instance_url, path, bearer, body).await
+        self.send(Method::PUT, instance_url, path, bearer, body)
+            .await
     }
 
     pub async fn delete(
@@ -226,7 +227,10 @@ impl ShellHttp {
         req: reqwest::RequestBuilder,
         instance_url: &str,
     ) -> Result<HttpResult, String> {
-        let resp = req.send().await.map_err(|e| format!("request failed: {e}"))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("request failed: {e}"))?;
         // The server re-sets the CSRF cookie on every response; refresh
         // the stored value so a rotated token never leaves the client
         // stale.
@@ -595,9 +599,7 @@ mod tests {
 
     #[test]
     fn get_with_bearer_sends_authorization() {
-        let server = MockServer::start(MockScript::new(vec![ok_json(
-            "{\"sessions\":[]}",
-        )]));
+        let server = MockServer::start(MockScript::new(vec![ok_json("{\"sessions\":[]}")]));
         let http = ShellHttp::new();
         tauri::async_runtime::block_on(async {
             let result = http
@@ -625,9 +627,13 @@ mod tests {
         }]));
         let http = ShellHttp::new();
         let result = tauri::async_runtime::block_on(async {
-            http.get(&server.url(), "/api/desktop/pair/status?code=ABCD2345", None)
-                .await
-                .expect("get")
+            http.get(
+                &server.url(),
+                "/api/desktop/pair/status?code=ABCD2345",
+                None,
+            )
+            .await
+            .expect("get")
         });
         assert_eq!(result.status, StatusCode::GONE);
         assert_eq!(

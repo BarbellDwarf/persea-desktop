@@ -86,10 +86,7 @@ pub enum PairingState {
     /// No pairing has been started.
     Idle,
     /// Code shown, poll loop running.
-    Waiting {
-        code: String,
-        expires_at: String,
-    },
+    Waiting { code: String, expires_at: String },
     /// The code was approved and the token is in the keychain.
     Approved {
         token_id: i64,
@@ -105,9 +102,7 @@ pub enum PairingState {
     /// The user cancelled.
     Cancelled,
     /// Something went wrong (server error, keychain failure).
-    Failed {
-        message: String,
-    },
+    Failed { message: String },
 }
 
 /// Events the poll loop and the user actions produce; [`apply_event`]
@@ -181,11 +176,13 @@ fn with_session<R>(instance_url: &str, f: impl FnOnce(&mut PairingSession) -> R)
     let mut guard = SESSIONS.lock().ok()?;
     let map = guard.get_or_insert_with(HashMap::new);
     let key = instance_url.trim_end_matches('/');
-    let session = map.entry(key.to_string()).or_insert_with(|| PairingSession {
-        state: PairingState::Idle,
-        started: Instant::now(),
-        generation: 0,
-    });
+    let session = map
+        .entry(key.to_string())
+        .or_insert_with(|| PairingSession {
+            state: PairingState::Idle,
+            started: Instant::now(),
+            generation: 0,
+        });
     Some(f(session))
 }
 
@@ -227,20 +224,31 @@ enum PollOutcome {
 }
 
 /// One status poll: `GET /api/desktop/pair/status?code=...`.
-async fn poll_once(
-    http: &http::ShellHttp,
-    instance_url: &str,
-    code: &str,
-) -> PollOutcome {
+async fn poll_once(http: &http::ShellHttp, instance_url: &str, code: &str) -> PollOutcome {
     let path = format!("/api/desktop/pair/status?code={code}");
     match http.get(instance_url, &path, None).await {
         Ok(result) if result.status == StatusCode::OK => {
             match result.body.get("status").and_then(|s| s.as_str()) {
                 Some("approved") => PollOutcome::Approved {
-                    token_id: result.body.get("token_id").and_then(|v| v.as_i64()).unwrap_or(0),
-                    token: result.body.get("token").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    token_name: result.body.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    device_name: result.body
+                    token_id: result
+                        .body
+                        .get("token_id")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0),
+                    token: result
+                        .body
+                        .get("token")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    token_name: result
+                        .body
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    device_name: result
+                        .body
                         .get("device_name")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
@@ -249,13 +257,11 @@ async fn poll_once(
                 _ => PollOutcome::Pending,
             }
         }
-        Ok(result) if result.status == StatusCode::GONE => {
-            match result.server_error().as_deref() {
-                Some(msg) if msg.contains("expired") => PollOutcome::Expired,
-                Some(msg) if msg.contains("used") => PollOutcome::Used,
-                _ => PollOutcome::Expired,
-            }
-        }
+        Ok(result) if result.status == StatusCode::GONE => match result.server_error().as_deref() {
+            Some(msg) if msg.contains("expired") => PollOutcome::Expired,
+            Some(msg) if msg.contains("used") => PollOutcome::Used,
+            _ => PollOutcome::Expired,
+        },
         Ok(_) | Err(_) => PollOutcome::Transient,
     }
 }
@@ -329,11 +335,9 @@ fn spawn_poll(app: AppHandle, instance_url: String) {
                                 device_name,
                             },
                         ),
-                        Err(message) => finish_session(
-                            &instance_url,
-                            generation,
-                            PairingEvent::Failed(message),
-                        ),
+                        Err(message) => {
+                            finish_session(&instance_url, generation, PairingEvent::Failed(message))
+                        }
                     }
                     return;
                 }
@@ -381,12 +385,7 @@ async fn persist_approval(
     })?;
     for old_id in removed_ids {
         let old_user = keyring_user(instance_url, old_id);
-        let _ = keyring::keyring_delete(
-            SERVICE_NAME.to_string(),
-            old_user,
-            app.clone(),
-        )
-        .await;
+        let _ = keyring::keyring_delete(SERVICE_NAME.to_string(), old_user, app.clone()).await;
     }
     with_registry(app, |registry| registry.save())?;
     Ok(())
@@ -681,7 +680,8 @@ pub fn pairing_open_confirm_page(app: AppHandle, instance_url: String) -> Result
     let win = app
         .get_webview_window(instances::window_label(&url))
         .ok_or_else(|| "main window not found".to_string())?;
-    win.navigate(parsed).map_err(|e| format!("navigation failed: {e}"))
+    win.navigate(parsed)
+        .map_err(|e| format!("navigation failed: {e}"))
 }
 
 /// View of one registered token for the shell UI.
@@ -741,9 +741,7 @@ pub async fn pairing_revoke(
 ) -> Result<(), String> {
     let url = instances::validate_instance_url(&instance_url)?;
     let found = with_registry(&app, |r| {
-        r.for_instance(&url)
-            .iter()
-            .any(|t| t.token_id == token_id)
+        r.for_instance(&url).iter().any(|t| t.token_id == token_id)
     })?;
     if !found {
         return Err("no paired token with that id".to_string());
@@ -755,7 +753,11 @@ pub async fn pairing_revoke(
     )
     .await?;
     let result = http::shell_http()
-        .delete(&url, &format!("/api/me/tokens/{token_id}"), secret.as_deref())
+        .delete(
+            &url,
+            &format!("/api/me/tokens/{token_id}"),
+            secret.as_deref(),
+        )
         .await?;
     if !result.is_success() && result.status != StatusCode::NOT_FOUND {
         return Err(server_error("revocation failed", &result));
@@ -784,11 +786,7 @@ pub fn registered_tokens(app: &AppHandle) -> Vec<RegisteredToken> {
 }
 
 /// Keychain lookup for one paired token.
-pub async fn token_secret(
-    app: &AppHandle,
-    instance_url: &str,
-    token_id: i64,
-) -> Option<String> {
+pub async fn token_secret(app: &AppHandle, instance_url: &str, token_id: i64) -> Option<String> {
     keyring::keyring_get(
         SERVICE_NAME.to_string(),
         keyring_user(instance_url, token_id),
@@ -932,9 +930,7 @@ mod tests {
     fn poll_with(script: MockScript, code: &str) -> PollOutcome {
         let server = MockServer::start(script);
         let http = crate::http::ShellHttp::new();
-        tauri::async_runtime::block_on(async {
-            poll_once(&http, &server.url(), code).await
-        })
+        tauri::async_runtime::block_on(async { poll_once(&http, &server.url(), code).await })
     }
 
     #[test]
@@ -969,7 +965,10 @@ mod tests {
     #[test]
     fn poll_once_expired_and_used_are_distinct() {
         assert_eq!(
-            poll_with(MockScript::new(vec![gone("pairing code expired")]), "ABCD2345"),
+            poll_with(
+                MockScript::new(vec![gone("pairing code expired")]),
+                "ABCD2345"
+            ),
             PollOutcome::Expired
         );
         assert_eq!(
@@ -1061,11 +1060,25 @@ mod tests {
         let mut registry = temp_registry("latest");
         registry.register(sample_token(1, "a"));
         registry.register(sample_token(2, "b"));
-        assert_eq!(registry.latest("https://persea.example.com").unwrap().token_id, 2);
+        assert_eq!(
+            registry
+                .latest("https://persea.example.com")
+                .unwrap()
+                .token_id,
+            2
+        );
         assert!(registry.remove("https://persea.example.com", 2));
-        assert_eq!(registry.latest("https://persea.example.com").unwrap().token_id, 1);
+        assert_eq!(
+            registry
+                .latest("https://persea.example.com")
+                .unwrap()
+                .token_id,
+            1
+        );
         assert!(!registry.remove("https://persea.example.com", 99));
-        assert!(registry.for_instance("https://other.example.com").is_empty());
+        assert!(registry
+            .for_instance("https://other.example.com")
+            .is_empty());
     }
 
     #[test]
