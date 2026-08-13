@@ -1,0 +1,26 @@
+{
+  "identifier": "default",
+  "description": "Baseline capability for the main shell window only (D01). core:default covers invoke, events and basic window reads; core:tray:default prepares the tray (D08); the core:window:allow-* list covers window lifecycle for the multi-window manager (D05) and set-fullscreen for kiosk (D12). Remote pages get ZERO capabilities until D04 scopes remote IPC to the persea origin.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:tray:default",
+    "core:window:allow-create",
+    "core:window:allow-destroy",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-title",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-center",
+    "core:window:allow-start-dragging"
+  ]
+}

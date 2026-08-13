@@ -1,0 +1,102 @@
+# Persea Desktop
+
+Desktop shell for the Persea remote access server: a thin Tauri 2 client
+whose webview logs into a persea instance and hosts the remote desktop
+sessions. No server or guacd is embedded, you point the app at your own
+persea instance (BYO server).
+
+Current state: D01 scaffold. The window opens and shows a placeholder
+shell page; instance management, navigation control, pairing, tray and
+the other desktop features land in later tickets (tracked in the parent
+repository under `wayfinder/v1.2.0/`).
+
+## Repo layout
+
+| Path | Purpose |
+|------|---------|
+| `src-tauri/` | Rust app: Tauri shell, config, capabilities, icons |
+| `shell/` | Local HTML/JS pages (no bundler, plain files) |
+| `docs/` | Documentation (full docs land with D17) |
+| `scripts/` | Dev and smoke-test helpers |
+| `.github/workflows/` | CI: 3-OS check/fmt/clippy/test, cargo audit, CodeQL |
+
+## Prerequisites
+
+Rust 1.85.1 is pinned by `rust-toolchain.toml`; with rustup installed
+the right toolchain installs itself on first build. Tauri requires the
+system webview development libraries:
+
+### Debian / Ubuntu
+
+```sh
+sudo apt update
+sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev
+```
+
+### RHEL / Fedora (EPEL)
+
+RHEL 10 removed WebKitGTK from the base repos: enable EPEL 10 first,
+then install `webkit2gtk4.1-devel`. Fedora ships it in the default
+repos.
+
+```sh
+sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel libXdo-devel openssl-devel
+```
+
+### Windows
+
+WebView2 (Evergreen runtime) is preinstalled on Windows 11 and broadly
+deployed on Windows 10. Install the Rust MSVC toolchain via rustup and
+the Microsoft C++ Build Tools. `cargo tauri dev` needs no extra system
+setup on Windows.
+
+### macOS
+
+Install the Xcode Command Line Tools (`xcode-select --install`); the
+WKWebView engine ships with macOS.
+
+## Development
+
+The `shell/` frontend is plain HTML with no build step. With no
+`devUrl` configured, `tauri dev` serves `frontendDist` with its built-in
+dev server, so there is nothing to start beforehand.
+
+```sh
+# one-time: the Tauri CLI
+cargo install tauri-cli --version 2.11.4 --locked
+
+cargo tauri dev
+```
+
+The app opens a window titled "Persea Desktop". Point it at a local
+persea server with the dev script (stub until D02):
+
+```sh
+PERSEA_URL=http://127.0.0.1:8089 ./scripts/dev.sh
+```
+
+## Testing
+
+```sh
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+cargo audit --manifest-path src-tauri/Cargo.toml
+```
+
+`scripts/smoke.sh` builds the binary and checks that the window process
+stays alive; it needs an X/Wayland display (use `xvfb-run` headless).
+The tauri-driver based test harness is D16.
+
+## Identity notes
+
+- Binary name: `persea-desktop`, display name "Persea Desktop", version
+  1.2.0, identifier `dev.persea.desktop` (chosen over
+  `com.persea.desktop`; revisit before the first release, D14).
+- Icons under `src-tauri/icons/` are generated placeholders
+  (`scripts/gen-placeholder-icons.py`); the real artwork is D18.
+
+## License
+
+Apache-2.0, see [LICENSE](LICENSE) and
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
