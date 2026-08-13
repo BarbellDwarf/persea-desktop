@@ -867,14 +867,20 @@ pub async fn upload_one(
     let progress = Arc::new(AtomicU64::new(0));
     let progress_clone = Arc::clone(&progress);
     let path = local_path.to_path_buf();
-    let read = tauri::async_runtime::spawn_blocking(move || read_chunked(&path, &progress_clone));
+    let done_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let done_flag_clone = done_flag.clone();
+    let read = tauri::async_runtime::spawn_blocking(move || {
+        let r = read_chunked(&path, &progress_clone);
+        done_flag_clone.store(true, Ordering::Relaxed);
+        r
+    });
     with_row(row_id, |t| {
         t.status = TransferStatus::Reading;
         t.bytes_total = total;
     });
     emit_changed(app);
     loop {
-        if read.is_finished() {
+        if done_flag.load(Ordering::Relaxed) {
             break;
         }
         let done = progress.load(Ordering::Relaxed);
@@ -1175,7 +1181,7 @@ pub async fn cmd_transfer_retry(app: AppHandle, id: u64) -> Result<(), String> {
             })
             .ok_or_else(|| "no upload transfer with that id".to_string())?
     };
-    let (instance, session_id, local_path, remote_name) = upload;
+    let (instance, session_id, local_path, _remote_name) = upload;
     let local_path = local_path.ok_or_else(|| "the upload has no source file".to_string())?;
     let bearer = pairing::token_for(&app, &instance)
         .await

@@ -177,6 +177,9 @@ pub fn handler<R: Runtime>(
             });
             true
         }
+        // Engine-specific events we do not act on (e.g. the cancelled
+        // event on some engines). Download interception still applies.
+        _ => true,
     }
 }
 

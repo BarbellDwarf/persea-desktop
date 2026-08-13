@@ -603,7 +603,7 @@ async fn run_instance(app: AppHandle, url: String) {
                     }
                     TickOutcome::AuthFailed => {
                         crate::tray::set_signed_out(&app, &url, true);
-                        notify::relogin_needed(&app, instance_name(&url));
+                        notify::relogin_needed(&app, &instance_name(&url));
                         state.mode = Mode::SignedOut;
                     }
                     TickOutcome::Transient => {
@@ -623,7 +623,7 @@ async fn run_instance(app: AppHandle, url: String) {
                     }
                     StreamOutcome::AuthFailed => {
                         crate::tray::set_signed_out(&app, &url, true);
-                        notify::relogin_needed(&app, instance_name(&url));
+                        notify::relogin_needed(&app, &instance_name(&url));
                         state.mode = Mode::SignedOut;
                     }
                     StreamOutcome::Transient => {
@@ -787,7 +787,7 @@ async fn fire_deltas(
 /// name, thumbnail, idle reaper timeout. Best effort; failures yield
 /// None (the engine keeps the list-level view).
 async fn fetch_session_detail(
-    app: &AppHandle,
+    _app: &AppHandle,
     url: &str,
     token: &str,
     session_id: &str,

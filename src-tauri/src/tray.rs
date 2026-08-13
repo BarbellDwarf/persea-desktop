@@ -297,7 +297,7 @@ fn tray_icon(state: &TrayState) -> Result<tauri::image::Image<'static>, String> 
 // Menu construction
 // ---------------------------------------------------------------------------
 
-fn build_menu(app: &AppHandle) -> tauri::Result<Menu> {
+fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let state = state_handle()
         .ok_or("tray state is not initialized")
         .map_err(menu_error)?
@@ -341,7 +341,7 @@ fn build_instance_submenu(
     app: &AppHandle,
     state: &TrayState,
     instance: &instances::Instance,
-) -> tauri::Result<Submenu> {
+) -> tauri::Result<Submenu<tauri::Wry>> {
     let url = instance.url.trim_end_matches('/').to_string();
     let mut items: Vec<&dyn IsMenuItem> = Vec::new();
     let sessions = state.sessions.get(&url).cloned().unwrap_or_default();

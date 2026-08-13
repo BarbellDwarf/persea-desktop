@@ -132,7 +132,7 @@ const PREFS_FILE: &str = "windows.json";
 
 static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 static TX: OnceLock<Sender<Msg>> = OnceLock::new();
-static MANAGER: OnceLock<Mutex<Manager>> = OnceLock::new();
+static MANAGER: OnceLock<Mutex<WindowManager>> = OnceLock::new();
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -229,7 +229,7 @@ pub struct MonitorView {
 }
 
 /// Resolved expand target: monitor position + size in physical pixels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MonitorTarget {
     pub name: Option<String>,
     pub x: i32,
@@ -1098,7 +1098,7 @@ fn save_prefs(
 // ---------------------------------------------------------------------------
 
 /// The manager ties the pure state machine to the tauri runtime.
-struct Manager {
+struct WindowManager {
     app: tauri::AppHandle,
     state: TabState,
     policy: NavigationPolicy,
@@ -1106,7 +1106,7 @@ struct Manager {
     strip_enabled: bool,
 }
 
-impl Manager {
+impl WindowManager {
     fn config_dir(&self) -> std::path::PathBuf {
         self.app
             .path()
@@ -1115,7 +1115,7 @@ impl Manager {
     }
 }
 
-fn manager() -> Option<std::sync::MutexGuard<'static, Manager>> {
+fn manager() -> Option<std::sync::MutexGuard<'static, WindowManager>> {
     MANAGER.get().map(|m| m.lock().unwrap())
 }
 
@@ -1264,7 +1264,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let (tx, rx) = mpsc::channel::<Msg>();
     let _ = TX.set(tx.clone());
 
-    let manager = Manager {
+    let manager = WindowManager {
         app: app_handle.clone(),
         state,
         policy,
