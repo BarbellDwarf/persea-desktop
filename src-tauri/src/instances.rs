@@ -526,12 +526,10 @@ async fn fetch_status(
 /// Server-needs-setup hint: a fresh server redirects `GET /` to `/setup`
 /// (src/handlers/auth.rs:145-147). Detected from the final redirect chain.
 async fn fetch_needs_setup(client: &reqwest::Client, base: &str) -> bool {
-    let Ok(resp) = client
-        .get(base)
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .send()
-        .await
-    else {
+    // reqwest 0.12: the redirect policy lives on the client builder, not
+    // the request builder. Default clients follow up to 10 redirects; the
+    // final URL of the chain tells us whether the server bounced to /setup.
+    let Ok(resp) = client.get(base).send().await else {
         return false;
     };
     resp.url().path().starts_with("/setup")
