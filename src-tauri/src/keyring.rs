@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! OS keychain module.
 //!
 //! Thin Tauri commands over the keyring v4 ecosystem for the local shell:
@@ -78,12 +79,11 @@
 //!    manifest-gated commands without a matching ACL entry, plus any
 //!    custom command invoked from a remote origin.
 
-//! The Linux fallback chain (Secret Service / db-keystore / keyutils) is
-//! cfg-gated per platform; the imports, constants and variables it uses are
-//! legitimately unused on Windows/macOS. The compile gate runs with
-//! `-D warnings`, so the module carries a scoped allow; each platform arm
-//! removes what it consumes as it is exercised.
-#![allow(dead_code, unused_imports, unused_variables)]
+// The Linux fallback chain (Secret Service / db-keystore / keyutils) is
+// cfg-gated per platform; the imports, constants and variables it uses are
+// legitimately unused on Windows/macOS. The compile gate runs with
+// -D warnings, so the module carries a scoped allow; each platform arm
+// removes what it consumes as it is exercised.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
