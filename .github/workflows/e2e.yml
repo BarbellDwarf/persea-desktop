@@ -57,7 +57,7 @@ jobs:
         id: server
         run: |
           cd /tmp
-          git clone --depth 1 --branch v1.2.0 https://github.com/BarbellDwarf/persea.git
+          git clone --depth 1 --branch v1.2.0 https://github.com/persea-grove/persea.git
           eval "$(echo "$GITHUB_WORKSPACE/tests/e2e/provision-server.sh /tmp/persea 8099" | tee /tmp/provision.env)"
           grep -E "PERSEA_E2E" /tmp/provision.env >> "$GITHUB_ENV"
 
