@@ -37,8 +37,9 @@ def make_png(size):
             dx = x + 0.5 - center
             dy = y + 0.5 - center
             px = FG if dx * dx + dy * dy <= radius * radius else BG
-            rows.extend(px)
-    ihdr = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+            # tauri requires RGBA (color type 6): full alpha channel.
+            rows.extend(px + (255,))
+    ihdr = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
     return (
         b"\x89PNG\r\n\x1a\n"
         + png_chunk(b"IHDR", ihdr)
