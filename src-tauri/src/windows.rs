@@ -994,7 +994,8 @@ pub fn clean_title(title: &str) -> String {
     // " — HH:MM:SS — " separators: split at the LAST " — " pair.
     if let Some(idx) = without_dot.rfind(" — ") {
         let (head, tail) = without_dot.split_at(idx);
-        let tail = &tail[3..];
+        // The separator is " — " = space + 3-byte em dash + space.
+        let tail = &tail[5..];
         let looks_like_timer = tail.len() == 8
             && tail.as_bytes()[2] == b':'
             && tail.as_bytes()[5] == b':'
@@ -2199,12 +2200,12 @@ mod tests {
         assert!(effects
             .iter()
             .any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
-        // Closing the last tab goes home.
+        // Closing the last tab goes home (self.home carries the slash).
         let effects = state.close("aaa111");
         assert!(state.tabs().is_empty());
         assert_eq!(state.active(), None);
         assert!(effects.iter().any(
-            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com")
+            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com/")
         ));
     }
 

@@ -403,16 +403,18 @@ mod tests {
             });
         }
         assert_eq!(guard.records.len(), RECORD_CAP);
+        // The first 10 pushes (file-0..file-9) must be gone; the rest
+        // survive in order.
         assert!(
             guard
                 .records
                 .iter()
-                .all(|r| !r.url.contains("/file-9.") && !r.url.contains("/file-8.")),
+                .all(|r| !r.url.contains("/file-0.") && !r.url.contains("/file-9.")),
             "the oldest records must be evicted"
         );
         assert!(
-            guard.records.iter().all(|r| r.url.contains("/file-1")),
-            "the newest records must survive"
+            guard.records.front().unwrap().url.contains("/file-10."),
+            "the first survivor must be file-10"
         );
     }
 }
