@@ -8,17 +8,7 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [
-      {
-        "label": "main",
-        "title": "Persea Desktop",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
-        "center": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:",
       "devCsp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"

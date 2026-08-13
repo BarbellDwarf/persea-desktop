@@ -1,7 +1,79 @@
+mod bridge;
+mod instances;
+mod keyring;
+mod navigation;
+mod shell_config;
+
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .setup(|app| {
+            // Theme first: shell pages render with it.
+            shell_config::setup(app)?;
+
+            // Instance store BEFORE the window policy: the navigation
+            // allowlist and the initial URL both need the loaded store.
+            // (auto_open inside instances::setup skips silently while the
+            // window does not exist; we navigate after building it below.)
+            instances::setup(app)?;
+
+            // The main window is code-built: on_navigation and
+            // on_new_window are build-time-only in tauri 2.11 (D03), so a
+            // config-declared window can never carry the lockdown
+            // handlers. The window opens on the local welcome page;
+            // auto-open then navigates to the default/last instance.
+            let origins: Vec<String> = instances::instances()
+                .iter()
+                .map(|i| i.url.clone())
+                .collect();
+            let policy = navigation::NavigationPolicy::new(origins.clone(), Vec::new());
+            let builder = WebviewWindowBuilder::new(
+                app,
+                "main",
+                WebviewUrl::App("index.html".into()),
+            )
+            .title("Persea Desktop")
+            .inner_size(1280.0, 800.0)
+            .min_inner_size(800.0, 600.0)
+            .center()
+            .initialization_script(bridge::init_script());
+            let builder = navigation::lock_window_builder(builder, policy);
+            builder.build()?;
+
+            // Bridge: validate the runtime instance origins against the
+            // baked remote-URL allowlist (fail closed), install the
+            // page→shell listeners.
+            bridge::register(app, origins);
+
+            // Auto-open the default/last instance now that the window
+            // exists (the same call auto_open made early was a silent
+            // no-op).
+            let handle = app.handle().clone();
+            let _ = instances::cmd_instances_open_default(handle);
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            instances::cmd_instances_list,
+            instances::cmd_instances_add,
+            instances::cmd_instances_update,
+            instances::cmd_instances_remove,
+            instances::cmd_instances_set_default,
+            instances::cmd_instances_probe,
+            instances::cmd_instances_open,
+            instances::cmd_instances_open_default,
+            instances::cmd_instances_open_setup,
+            shell_config::cmd_shell_get_settings,
+            shell_config::cmd_shell_set_appearance,
+            shell_config::cmd_app_version,
+            keyring::keyring_set,
+            keyring::keyring_get,
+            keyring::keyring_delete,
+            keyring::keyring_tier,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Persea Desktop");
 }
@@ -54,14 +126,14 @@ mod tests {
     }
 
     #[test]
-    fn main_window_exists_and_is_titled() {
+    fn main_window_is_code_built_not_config_declared() {
+        // D03: on_navigation/on_new_window are build-time-only, so the
+        // main window is constructed in lib.rs setup() and must NOT be
+        // declared in tauri.conf.json.
         let cfg = load_config();
-        let main = cfg
-            .app
-            .windows
-            .iter()
-            .find(|w| w.label.as_deref() == Some("main"))
-            .unwrap_or_else(|| panic!("a window labeled \"main\" must be configured"));
-        assert_eq!(main.title, "Persea Desktop");
+        assert!(
+            cfg.app.windows.is_empty(),
+            "the main window must be code-built (navigation lockdown needs builder hooks)"
+        );
     }
 }

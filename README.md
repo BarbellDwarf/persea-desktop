@@ -22,9 +22,11 @@ tickets (tracked in the parent repository under `wayfinder/v1.2.0/`).
 
 ## Prerequisites
 
-Rust 1.85.1 is pinned by `rust-toolchain.toml`; with rustup installed
-the right toolchain installs itself on first build. Tauri requires the
-system webview development libraries:
+Rust 1.88 is pinned by `rust-toolchain.toml` (raised from 1.85 on
+2026-08-13: the zbus-based keyring stores need Rust ≥ 1.87, so the
+Debian-13 native toolchain is no longer sufficient — use rustup on
+Debian too). With rustup installed the right toolchain installs itself
+on first build. Tauri requires the system webview development libraries:
 
 ### Debian / Ubuntu
 
