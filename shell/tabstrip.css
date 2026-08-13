@@ -1,0 +1,203 @@
+/* Persea Desktop tab strip (window manager).
+ *
+ * The strip window is 44 logical px tall, frameless, always on top,
+ * docked above the main window by the Rust side. This stylesheet only
+ * adds strip structure; the design tokens come from settings.css.
+ */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-secondary, #111827);
+  color: var(--text-primary, #f1f5f9);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 12px;
+  user-select: none;
+}
+
+.strip {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 6px;
+  gap: 6px;
+  border-bottom: 1px solid var(--border, #2a3548);
+  box-sizing: border-box;
+}
+
+.tabs {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  height: 36px;
+  padding-top: 4px;
+  box-sizing: border-box;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border-radius: 8px 8px 0 0;
+  background: var(--bg-input, #1e293b);
+  border: 1px solid var(--border, #2a3548);
+  border-bottom: none;
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 200px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.tab:hover {
+  background: var(--bg-hover, #253040);
+  color: var(--text-primary, #f1f5f9);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--border-focus, #5bc0be);
+  outline-offset: -2px;
+}
+
+.tab.active {
+  background: var(--bg-card, #1a2332);
+  color: var(--text-primary, #f1f5f9);
+}
+
+.tab.ended {
+  opacity: 0.55;
+}
+
+.tab.hidden-tab {
+  display: none;
+}
+
+.tab .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-live { background: var(--success, #34d399); }
+.dot-connecting { background: var(--warning, #fbbf24); }
+.dot-ended { background: var(--danger, #f87171); }
+
+.tab .badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent, #5bc0be);
+  color: var(--accent-ink, #052a2c);
+  flex-shrink: 0;
+}
+
+.tab .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.tab .mode-icon {
+  font-size: 10px;
+  color: var(--text-muted, #8b98a5);
+  flex-shrink: 0;
+}
+
+.tab .close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #8b98a5);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tab .close:hover {
+  background: var(--danger-bg, rgba(248, 113, 113, 0.1));
+  color: var(--danger, #f87171);
+}
+
+.overflow-btn {
+  border: 1px solid var(--border, #2a3548);
+  background: var(--bg-input, #1e293b);
+  color: var(--text-secondary, #94a3b8);
+  border-radius: 6px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0 6px;
+  cursor: pointer;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.overflow-btn:hover {
+  background: var(--bg-hover, #253040);
+  color: var(--text-primary, #f1f5f9);
+}
+
+.overflow-btn:focus-visible {
+  outline: 2px solid var(--border-focus, #5bc0be);
+}
+
+/* The overflow popover hangs BELOW the strip window: the window is
+ * only 44 px tall, so the Rust side grows it when this list is open.
+ * The list is positioned at the bottom of the strip window. */
+.overflow {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-card, #1a2332);
+  border: 1px solid var(--border, #2a3548);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.overflow-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary, #f1f5f9);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overflow-item:hover,
+.overflow-item:focus-visible {
+  background: var(--bg-hover, #253040);
+  outline: none;
+}
+
+.overflow-item.active {
+  color: var(--accent-strong, #7fd4d2);
+}
+
+.hidden {
+  display: none !important;
+}

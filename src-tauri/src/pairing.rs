@@ -50,6 +50,7 @@
 //! allow until wired in.
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -58,7 +59,7 @@ use std::time::{Duration, Instant};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::http;
 use crate::instances;
@@ -132,18 +133,18 @@ pub enum PairingEvent {
 /// Pure pairing state machine. Returns `(next_state, terminal)`;
 /// terminal means the poll loop stops.
 pub fn apply_event(state: PairingState, event: PairingEvent) -> (PairingState, bool) {
-    use PairingEvent::*;
+    use PairingEvent as Evt;
     use PairingState::*;
     match (state, event) {
-        (Waiting { code, expires_at }, PollTick) => (Waiting { code, expires_at }, false),
-        (Waiting { .. }, Timeout) => (TimedOut, true),
-        (Waiting { .. }, Expired) => (Expired, true),
-        (Waiting { .. }, Used) => (Used, true),
-        (Waiting { .. }, Cancel) => (Cancelled, true),
-        (Waiting { .. }, Failed(message)) => (Failed { message }, true),
+        (Waiting { code, expires_at }, Evt::PollTick) => (Waiting { code, expires_at }, false),
+        (Waiting { .. }, Evt::Timeout) => (TimedOut, true),
+        (Waiting { .. }, Evt::Expired) => (Expired, true),
+        (Waiting { .. }, Evt::Used) => (Used, true),
+        (Waiting { .. }, Evt::Cancel) => (Cancelled, true),
+        (Waiting { .. }, Evt::Failed(message)) => (Failed { message }, true),
         (
             Waiting { .. },
-            Approved {
+            Evt::Approved {
                 token_id,
                 token_name,
                 device_name,

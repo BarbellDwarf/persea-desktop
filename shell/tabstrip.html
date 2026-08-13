@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Persea Tabs</title>
+  <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="tabstrip.css">
+</head>
+<body>
+  <div id="strip" role="tablist" aria-label="Active sessions" class="strip">
+    <div id="tabs" class="tabs"></div>
+    <button id="overflow-btn" type="button" class="overflow-btn hidden" aria-haspopup="true"
+            aria-expanded="false" aria-label="More sessions" title="More sessions">&#x25BE;</button>
+  </div>
+  <div id="overflow" class="overflow hidden" role="menu" aria-label="More sessions"></div>
+  <script src="tabstrip.js"></script>
+</body>
+</html>

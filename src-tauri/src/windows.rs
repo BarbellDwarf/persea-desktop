@@ -89,15 +89,19 @@
 //!    sessions lose the login cookie. `windows::instance_webview_data`
 //!    returns the canonical pair; apply it to the main window builder
 //!    too.
-//! 7. Session windows are built by this module with the navigation
-//!    lockdown (via `navigation::lock_window_builder`), the bridge init
-//!    script, the download handler and the per-instance data store.
+//! 7. Session windows are built by this module with the same navigation
+//!    lockdown the main window carries (the shared `NavigationPolicy`
+//!    from the instance store), the bridge init script, the download
+//!    handler and the per-instance data store. The lockdown handlers
+//!    are this module's label-aware variants: the plain
+//!    `navigation::*` handlers cannot report navigations into the tab
+//!    manager, and session-window navigations drive tab lifecycle.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -248,9 +252,15 @@ pub enum Effect {
     /// Destroy a window by label.
     CloseWindow(String),
     FocusWindow(String),
-    SetTitle { label: String, title: String },
+    SetTitle {
+        label: String,
+        title: String,
+    },
     /// Move to the monitor and enter fullscreen.
-    ExpandWindow { label: String, target: MonitorTarget },
+    ExpandWindow {
+        label: String,
+        target: MonitorTarget,
+    },
     UnfullscreenWindow(String),
     /// Recompute strip position/visibility.
     DockStrip,
@@ -297,6 +307,8 @@ pub struct TabState {
     active: Option<String>,
     /// Last URL the main viewport settled on.
     viewport_url: Option<String>,
+    /// Instance home (origin + "/") for viewport navigation targets.
+    home: Option<String>,
     /// Shell-initiated viewport/window navigations that must NOT be
     /// interpreted as page-initiated departures.
     expected: HashSet<(String, String)>,
@@ -370,6 +382,9 @@ impl TabState {
             .or_else(|| self.overrides.get(&id).copied())
             .unwrap_or(self.default_mode);
         let instance = instance_origin(url);
+        if self.home.is_none() {
+            self.home = Some(instance.clone() + "/");
+        }
         let title = format!("Session {}", short_id(&id));
         self.tabs.push(Tab {
             id: id.clone(),
@@ -470,10 +485,9 @@ impl TabState {
         let was_inline = matches!(self.tabs[idx].mode, TabMode::Inline);
         let label = session_window_label(id);
         let mut effects = Vec::new();
-        let previous = self.previous_tab_of(idx);
-        self.tabs.remove(idx);
+        let previous = self.remove_tab_at(idx);
         if was_active {
-            self.active = previous;
+            self.active = previous.clone();
         }
         if !was_inline {
             effects.push(Effect::CloseWindow(label));
@@ -482,7 +496,7 @@ impl TabState {
             let target = previous
                 .as_ref()
                 .and_then(|p| self.tabs.iter().find(|t| t.id == *p).map(|t| t.url.clone()))
-                .unwrap_or_else(|| viewport_home(&self.tabs));
+                .unwrap_or_else(|| viewport_home(&self.tabs, &self.home));
             effects.push(Effect::NavigateViewport(target));
             effects.push(Effect::FocusViewport);
         }
@@ -522,8 +536,9 @@ impl TabState {
             Effect::EmitTabsChanged,
         ];
         if was_active {
-            let home = viewport_home(&self.tabs);
-            self.expected.insert((MAIN_WINDOW_LABEL.to_string(), home.clone()));
+            let home = viewport_home(&self.tabs, &self.home);
+            self.expected
+                .insert((MAIN_WINDOW_LABEL.to_string(), home.clone()));
             effects.push(Effect::NavigateViewport(home));
         }
         effects
@@ -576,7 +591,7 @@ impl TabState {
                     instance,
                 });
                 if was_active {
-                    let home = viewport_home(&self.tabs);
+                    let home = viewport_home(&self.tabs, &self.home);
                     self.expected
                         .insert((MAIN_WINDOW_LABEL.to_string(), home.clone()));
                     effects.push(Effect::NavigateViewport(home));
@@ -656,6 +671,9 @@ impl TabState {
     fn note_viewport_navigated(&mut self, url: &Url) -> Vec<Effect> {
         let prev = self.viewport_url.clone();
         self.viewport_url = Some(url.to_string());
+        if matches!(url.scheme(), "http" | "https") {
+            self.home = Some(instance_origin(url) + "/");
+        }
         if let Some(id) = session_id_from_url(url) {
             // Entering a session page.
             if let Some(idx) = self.tabs.iter().position(|t| t.id == id) {
@@ -707,15 +725,12 @@ impl TabState {
             // Session-to-session navigation inside a pop-out window:
             // close this tab/window and open the new session per mode.
             let mut effects = self.close(id);
-            effects.push(Effect::CloseWindow(label.to_string()));
             effects.extend(self.open_session(url, None));
             return effects;
         }
         // Page-initiated departure (close flow, logout): the tab is a
         // view, the view is gone; close tab + window.
-        let mut effects = self.close(id);
-        effects.push(Effect::CloseWindow(label.to_string()));
-        effects
+        self.close(id)
     }
 
     pub fn note_session_ready(&mut self, id: &str) -> Vec<Effect> {
@@ -741,7 +756,10 @@ impl TabState {
             return Vec::new();
         }
         tab.status = TabStatus::Ended;
-        vec![Effect::AutoCloseScheduled(id.to_string()), Effect::EmitTabsChanged]
+        vec![
+            Effect::AutoCloseScheduled(id.to_string()),
+            Effect::EmitTabsChanged,
+        ]
     }
 
     pub fn note_window_closed(&mut self, label: &str) -> Vec<Effect> {
@@ -790,7 +808,9 @@ impl TabState {
         let id: Option<String> = if label == MAIN_WINDOW_LABEL {
             self.viewport_url.as_deref().and_then(session_id_from_str)
         } else {
-            label.strip_prefix(SESSION_WINDOW_PREFIX).map(str::to_string)
+            label
+                .strip_prefix(SESSION_WINDOW_PREFIX)
+                .map(str::to_string)
         };
         let Some(id) = id else { return Vec::new() };
         let Some(idx) = self.tabs.iter().position(|t| t.id == id) else {
@@ -822,12 +842,6 @@ impl TabState {
             self.close(id)
         } else {
             Vec::new()
-        }
-    }
-
-    fn remove_tab(&mut self, id: &str) {
-        if let Some(idx) = self.tabs.iter().position(|t| t.id == id) {
-            self.tabs.remove(idx);
         }
     }
 
@@ -866,13 +880,23 @@ pub fn dock_placement(
 ) -> DockPlacement {
     let sw = strip_w as i32;
     let sh = strip_h as i32;
-    let clamp_x = |x: i32| x.clamp(work.x, work.x + work.width as i32 - sw);
-    if main_pos.y >= work.y + sh {
+    if sw >= work.size.width as i32 {
+        // Strip wider than the work area: nothing sensible to do.
+        return DockPlacement::Hidden;
+    }
+    let clamp_x = |x: i32| {
+        x.clamp(
+            work.position.x,
+            work.position.x + work.size.width as i32 - sw,
+        )
+    };
+    if main_pos.y >= work.position.y + sh {
         DockPlacement::Above(tauri::PhysicalPosition::new(
             clamp_x(main_pos.x),
             main_pos.y - sh,
         ))
-    } else if main_pos.y + main_size.height as i32 + sh <= work.y + work.height as i32 {
+    } else if main_pos.y + main_size.height as i32 + sh <= work.position.y + work.size.height as i32
+    {
         DockPlacement::Below(tauri::PhysicalPosition::new(
             clamp_x(main_pos.x),
             main_pos.y + main_size.height as i32,
@@ -909,11 +933,13 @@ fn instance_origin(url: &Url) -> String {
 }
 
 /// Viewport home: the origin of the last tab's instance, else the first
-/// tab's instance, else an empty string (no-op navigation).
-fn viewport_home(tabs: &[Tab]) -> String {
+/// tab's instance, else the instance the viewport last settled on, else
+/// an empty string (no-op navigation).
+fn viewport_home(tabs: &[Tab], home: &Option<String>) -> String {
     tabs.last()
         .or_else(|| tabs.first())
         .map(|t| t.instance.clone())
+        .or_else(|| home.clone())
         .unwrap_or_default()
 }
 
@@ -968,13 +994,6 @@ pub fn clean_title(title: &str) -> String {
         }
     }
     without_dot.trim().to_string()
-}
-
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -1050,7 +1069,11 @@ fn load_prefs(config_dir: &std::path::Path) -> PrefsFile {
     }
 }
 
-fn save_prefs(config_dir: &std::path::Path, default_mode: PopMode, overrides: &HashMap<String, PopMode>) {
+fn save_prefs(
+    config_dir: &std::path::Path,
+    default_mode: PopMode,
+    overrides: &HashMap<String, PopMode>,
+) {
     let prefs = state_to_prefs(default_mode, overrides);
     if let Ok(data) = serde_json::to_string_pretty(&prefs) {
         let path = prefs_path(config_dir);
@@ -1091,27 +1114,31 @@ fn manager() -> Option<std::sync::MutexGuard<'static, Manager>> {
 }
 
 fn send(msg: Msg) -> Result<(), String> {
-    let tx = TX.get().ok_or_else(|| "window manager is not initialized".to_string())?;
-    tx.send(msg).map_err(|e| format!("window manager stopped: {e}"))
+    let tx = TX
+        .get()
+        .ok_or_else(|| "window manager is not initialized".to_string())?;
+    tx.send(msg)
+        .map_err(|e| format!("window manager stopped: {e}"))
 }
 
 fn current_policy() -> NavigationPolicy {
-    manager()
-        .map(|m| m.policy.clone())
-        .unwrap_or_else(|| {
-            let origins: Vec<String> = crate::instances::instances()
-                .iter()
-                .map(|i| i.url.clone())
-                .collect();
-            NavigationPolicy::new(origins, Vec::new())
-        })
+    manager().map(|m| m.policy.clone()).unwrap_or_else(|| {
+        let origins: Vec<String> = crate::instances::instances()
+            .iter()
+            .map(|i| i.url.clone())
+            .collect();
+        NavigationPolicy::new(origins, Vec::new())
+    })
 }
 
 /// The canonical per-instance webview data directory + store identifier.
 /// Session windows must share the instance's cookie store with the main
 /// window, or popped sessions land on a login page. Apply the same pair
 /// to the main window builder.
-pub fn instance_webview_data(app: &tauri::AppHandle, instance_url: &str) -> (Option<[u8; 16]>, PathBuf) {
+pub fn instance_webview_data(
+    app: &tauri::AppHandle,
+    instance_url: &str,
+) -> (Option<[u8; 16]>, PathBuf) {
     let key = crate::instances::store_key(instance_url);
     let mut ident = [0u8; 16];
     for (i, b) in key.bytes().take(16).enumerate() {
@@ -1142,22 +1169,27 @@ pub fn lock_viewport_builder<'a, R: Runtime, M: Manager<R>>(
 /// on_navigation for any window hosting persea pages: applies the
 /// navigation lockdown and reports the navigation to the tab manager.
 pub fn viewport_navigation_handler() -> impl Fn(&Url) -> bool + Send + 'static {
+    navigation_handler_for(MAIN_WINDOW_LABEL.to_string())
+}
+
+fn navigation_handler_for(label: String) -> impl Fn(&Url) -> bool + Send + 'static {
     move |url: &Url| {
         let policy = current_policy();
-        let allow = policy.classify(url).is_allowed();
-        if !allow {
-            log_blocked(url);
-            match policy.classify(url) {
-                navigation::Decision::OpenExternally => {
-                    let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
-                }
-                _ => {}
+        match policy.classify(url) {
+            navigation::Decision::Allow => {}
+            navigation::Decision::OpenExternally => {
+                log_blocked(url);
+                let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+                return false;
             }
-            return false;
+            navigation::Decision::Deny => {
+                log_blocked(url);
+                return false;
+            }
         }
         if let Some(tx) = TX.get() {
             let _ = tx.send(Msg::Navigated {
-                label: MAIN_WINDOW_LABEL.to_string(),
+                label: label.clone(),
                 url: url.to_string(),
             });
         }
@@ -1250,12 +1282,13 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     .resizable(false)
     .always_on_top(true);
     let strip = builder.build()?;
+    let dock_tx = tx.clone();
     strip.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { signal_tx, .. } = event {
             // Alt+F4 on the strip hides it; the dock logic re-shows it
             // when a tab exists and the main window is active.
             let _ = signal_tx.send(true);
-            let _ = tx.send(Msg::DockNow);
+            let _ = dock_tx.send(Msg::DockNow);
         }
     });
     strip.on_menu_event(move |_win, event| {
@@ -1265,28 +1298,29 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Bridge events: terminal session lifecycle. `session-ended` is the
     // page's terminal event (never emitted during reconnect backoff),
     // so ONLY this path schedules the auto-close.
+    let ready_tx = tx.clone();
     app.listen_any("session-ready", move |event| {
         if let Some(id) = payload_session_id(event.payload()) {
-            let _ = tx.send(Msg::SessionReady { id });
+            let _ = ready_tx.send(Msg::SessionReady { id });
         }
     });
+    let ended_tx = tx.clone();
     app.listen_any("session-ended", move |event| {
         if let Some(id) = payload_session_id(event.payload()) {
-            let _ = tx.send(Msg::SessionEnded { id });
+            let _ = ended_tx.send(Msg::SessionEnded { id });
         }
     });
 
     // The main window drives the strip's dock position.
+    let move_tx = tx.clone();
     if let Some(main) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
-        main.on_window_event(move |event| {
-            match event {
-                tauri::WindowEvent::Moved(_)
-                | tauri::WindowEvent::Resized(_)
-                | tauri::WindowEvent::ScaleFactorChanged { .. } => {
-                    let _ = tx.send(Msg::DockNow);
-                }
-                _ => {}
+        main.on_window_event(move |event| match event {
+            tauri::WindowEvent::Moved(_)
+            | tauri::WindowEvent::Resized(_)
+            | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+                let _ = move_tx.send(Msg::DockNow);
             }
+            _ => {}
         });
     }
 
@@ -1297,23 +1331,33 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 fn payload_session_id(payload: &str) -> Option<String> {
     serde_json::from_str::<serde_json::Value>(payload)
         .ok()
-        .and_then(|v| v.get("session_id").and_then(|s| s.as_str()).map(str::to_string))
+        .and_then(|v| {
+            v.get("session_id")
+                .and_then(|s| s.as_str())
+                .map(str::to_string)
+        })
 }
 
 /// Parse a tab context-menu id back into a manager message.
 fn handle_menu_event(event: &tauri::menu::MenuEvent) -> Result<(), String> {
     let id = event.id().as_ref().to_string();
     if let Some(rest) = id.strip_prefix("tab-pop-out:") {
-        return send(Msg::PopOut { id: rest.to_string() });
+        return send(Msg::PopOut {
+            id: rest.to_string(),
+        });
     }
     if let Some(rest) = id.strip_prefix("tab-pop-in:") {
-        return send(Msg::PopIn { id: rest.to_string() });
+        return send(Msg::PopIn {
+            id: rest.to_string(),
+        });
     }
     if let Some(rest) = id.strip_prefix("tab-copy:") {
         return copy_share_link(rest);
     }
     if let Some(rest) = id.strip_prefix("tab-terminate:") {
-        return send(Msg::Close { id: rest.to_string() });
+        return send(Msg::Close {
+            id: rest.to_string(),
+        });
     }
     if let Some(rest) = id.strip_prefix("tab-expand:") {
         // tab-expand:<tab-id>|<monitor name>
@@ -1328,22 +1372,36 @@ fn handle_menu_event(event: &tauri::menu::MenuEvent) -> Result<(), String> {
 
 fn copy_share_link(id: &str) -> Result<(), String> {
     let url = manager()
-        .and_then(|m| m.state.tabs().iter().find(|t| t.id == id).map(|t| t.url.clone()))
+        .and_then(|m| {
+            m.state
+                .tabs()
+                .iter()
+                .find(|t| t.id == id)
+                .map(|t| t.url.clone())
+        })
         .ok_or_else(|| format!("no tab {id}"))?;
-    let app = APP.get().ok_or_else(|| "window manager is not initialized".to_string())?;
+    let app = APP
+        .get()
+        .ok_or_else(|| "window manager is not initialized".to_string())?;
     use tauri_plugin_clipboard_manager::ClipboardExt;
     app.clipboard().write_text(url).map_err(|e| e.to_string())
 }
 
 fn expand_on_monitor(id: String, monitor: Option<String>) -> Result<(), String> {
-    let app = APP.get().ok_or_else(|| "window manager is not initialized".to_string())?;
+    let app = APP
+        .get()
+        .ok_or_else(|| "window manager is not initialized".to_string())?;
     let main = app
         .get_webview_window(MAIN_WINDOW_LABEL)
         .ok_or_else(|| "main window not found".to_string())?;
     let monitors = main.available_monitors().map_err(|e| e.to_string())?;
     let chosen = monitor
         .as_ref()
-        .and_then(|name| monitors.iter().find(|m| m.name().map(|n| n == name).unwrap_or(false)))
+        .and_then(|name| {
+            monitors
+                .iter()
+                .find(|m| m.name().map(|n| n == name).unwrap_or(false))
+        })
         .or_else(|| monitors.first());
     let Some(target) = chosen else {
         return Err("no display available".to_string());
@@ -1445,7 +1503,12 @@ fn execute_effects(app: &tauri::AppHandle, effects: Vec<Effect>) {
                         let _ = win.set_focus();
                     }
                 }
-                Effect::OpenSessionWindow { label, url, title, instance } => {
+                Effect::OpenSessionWindow {
+                    label,
+                    url,
+                    title,
+                    instance,
+                } => {
                     let _ = build_session_window(&app, &label, &url, &title, &instance);
                 }
                 Effect::CloseWindow(label) => {
@@ -1517,7 +1580,6 @@ fn build_session_window(
     instance: &str,
 ) -> Result<(), String> {
     let parsed = Url::parse(url).map_err(|e| e.to_string())?;
-    let policy = current_policy();
     let (ident, data_dir) = instance_webview_data(app, instance);
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(parsed))
         .title(title)
@@ -1530,11 +1592,13 @@ fn build_session_window(
     if let Some(ident) = ident {
         builder = builder.data_store_identifier(ident);
     }
-    // Navigation lockdown from the shared module; the new-window handler
-    // is overridden below so window.open inside a session page also
-    // lands in the tab manager.
-    builder = navigation::lock_window_builder(builder, policy);
+    // The same lockdown the main window carries, plus the manager
+    // report: session-window navigations drive tab lifecycle (page
+    // close flow removes the tab, session-to-session migrates it).
+    // The plain navigation::handlers are NOT used here because they
+    // cannot report into the tab manager; the policy itself is shared.
     builder = builder
+        .on_navigation(navigation_handler_for(label.to_string()))
         .on_new_window(viewport_new_window_handler())
         .on_document_title_changed(title_handler())
         .on_download(crate::downloads::handler(app.clone()));
@@ -1542,10 +1606,14 @@ fn build_session_window(
     let label = label.to_string();
     win.on_window_event(move |event| match event {
         tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed => {
-            let _ = send(Msg::WindowClosed { label: label.clone() });
+            let _ = send(Msg::WindowClosed {
+                label: label.clone(),
+            });
         }
         tauri::WindowEvent::Focused(true) => {
-            let _ = send(Msg::WindowFocused { label: label.clone() });
+            let _ = send(Msg::WindowFocused {
+                label: label.clone(),
+            });
         }
         _ => {}
     });
@@ -1555,67 +1623,90 @@ fn build_session_window(
 /// Compute the strip's visibility/position and apply it. Reads window
 /// state from any thread (tauri dispatchers are thread-safe) and applies
 /// writes on the main thread.
+///
+/// The manager lock is dropped BEFORE any window dispatch: window state
+/// reads block on the main thread, and the main thread (navigation
+/// handlers, commands) takes the manager lock, so holding it across a
+/// dispatch would deadlock.
 fn dock_strip(app: &tauri::AppHandle) {
-    let Some(m) = manager() else { return };
-    if !m.strip_enabled {
-        hide_strip(app);
-        return;
+    enum Action {
+        Hide,
+        Show(DockPlacement, u32, u32),
     }
-    let has_tabs = !m.state.tabs().is_empty();
-    if !has_tabs {
-        hide_strip(app);
-        return;
-    }
-    let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-        return;
+    let (strip_enabled, has_tabs) = match manager() {
+        Some(m) => (m.strip_enabled, !m.state.tabs().is_empty()),
+        None => return,
     };
-    let minimized = main.is_minimized().unwrap_or(false);
-    let maximized = main.is_maximized().unwrap_or(false);
-    let fullscreen = main.is_fullscreen().unwrap_or(false);
-    if minimized || maximized || fullscreen {
-        hide_strip(app);
-        return;
-    }
-    let Some(strip) = app.get_webview_window(STRIP_WINDOW_LABEL) else {
-        return;
+    let action = if !strip_enabled || !has_tabs {
+        Action::Hide
+    } else {
+        let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+            return;
+        };
+        let minimized = main.is_minimized().unwrap_or(false);
+        let maximized = main.is_maximized().unwrap_or(false);
+        let fullscreen = main.is_fullscreen().unwrap_or(false);
+        if minimized || maximized || fullscreen {
+            Action::Hide
+        } else {
+            let Some(strip) = app.get_webview_window(STRIP_WINDOW_LABEL) else {
+                return;
+            };
+            let Ok(main_pos) = main.outer_position() else {
+                return;
+            };
+            let Ok(main_size) = main.outer_size() else {
+                return;
+            };
+            let Ok(strip_size) = strip.outer_size() else {
+                return;
+            };
+            let Some(monitor) = main.current_monitor().ok().flatten() else {
+                return;
+            };
+            // Guard against an unrealized strip (height 0): fall back to
+            // the configured logical height scaled to this monitor.
+            let strip_height = if strip_size.height == 0 {
+                let scale = main.scale_factor().unwrap_or(1.0);
+                (STRIP_HEIGHT * scale).round() as u32
+            } else {
+                strip_size.height
+            };
+            let placement = dock_placement(
+                strip_size.width,
+                strip_height,
+                main_pos,
+                main_size,
+                *monitor.work_area(),
+            );
+            Action::Show(placement, main_size.width, strip_height)
+        }
     };
-    let Ok(main_pos) = main.outer_position() else { return };
-    let Ok(main_size) = main.outer_size() else { return };
-    let Ok(strip_size) = strip.outer_size() else { return };
-    let Some(monitor) = main.current_monitor().ok().flatten() else {
-        return;
-    };
-    let work = *monitor.work_area();
-    let placement = dock_placement(strip_size.width, strip_size.height, main_pos, main_size, work);
     let app = app.clone();
     let _ = app.run_on_main_thread(move || {
         let Some(strip) = app.get_webview_window(STRIP_WINDOW_LABEL) else {
             return;
         };
-        match placement {
-            DockPlacement::Above(pos) | DockPlacement::Below(pos) => {
+        match action {
+            Action::Show(placement, main_width, strip_height) => {
+                let placement = match placement {
+                    DockPlacement::Above(pos) | DockPlacement::Below(pos) => Some(pos),
+                    DockPlacement::Hidden => None,
+                };
+                let Some(pos) = placement else {
+                    let _ = strip.hide();
+                    return;
+                };
                 let _ = strip.set_position(pos);
-                let _ = strip.set_size(tauri::PhysicalSize::new(
-                    main_size.width,
-                    strip_size.height,
-                ));
-                if strip.is_visible().unwrap_or(false) == false {
+                let _ = strip.set_size(tauri::PhysicalSize::new(main_width, strip_height));
+                if !strip.is_visible().unwrap_or(false) {
                     let _ = strip.show();
                 }
             }
-            DockPlacement::Hidden => {
-                let _ = strip.hide();
-            }
-        }
-    });
-}
-
-fn hide_strip(app: &tauri::AppHandle) {
-    let app = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(strip) = app.get_webview_window(STRIP_WINDOW_LABEL) {
-            if strip.is_visible().unwrap_or(false) {
-                let _ = strip.hide();
+            Action::Hide => {
+                if strip.is_visible().unwrap_or(false) {
+                    let _ = strip.hide();
+                }
             }
         }
     });
@@ -1688,14 +1779,43 @@ pub fn cmd_tabs_open(url: String) -> Result<(), String> {
     send(Msg::OpenSession { url, mode: None })
 }
 
+/// Grow/shrink the strip window so the overflow popover fits below the
+/// tab row (the window is only 44 px tall; the popover hangs below it
+/// like a browser dropdown). `height` is the popover's logical height.
+#[tauri::command]
+pub fn cmd_tabs_overflow(open: bool, height: Option<f64>) -> Result<(), String> {
+    let app = APP
+        .get()
+        .ok_or_else(|| "window manager is not initialized".to_string())?;
+    let strip = app
+        .get_webview_window(STRIP_WINDOW_LABEL)
+        .ok_or_else(|| "tab strip window not found".to_string())?;
+    let scale = strip.scale_factor().map_err(|e| e.to_string())?;
+    let width = strip.inner_size().map_err(|e| e.to_string())?.width;
+    let logical_width = width as f64 / scale;
+    let extra = if open {
+        height.unwrap_or(0.0).clamp(0.0, 320.0)
+    } else {
+        0.0
+    };
+    strip
+        .set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+            logical_width,
+            STRIP_HEIGHT + extra,
+        )))
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn cmd_tabs_default_mode_get() -> Result<String, String> {
     manager()
-        .map(|m| match m.state.default_mode() {
-            PopMode::Tabs => "tabs",
-            PopMode::Window => "window",
-        }
-        .to_string())
+        .map(|m| {
+            match m.state.default_mode() {
+                PopMode::Tabs => "tabs",
+                PopMode::Window => "window",
+            }
+            .to_string()
+        })
         .ok_or_else(|| "window manager is not initialized".to_string())
 }
 
@@ -1704,14 +1824,20 @@ pub fn cmd_tabs_default_mode_set(mode: String) -> Result<(), String> {
     let mode = match mode.as_str() {
         "tabs" => PopMode::Tabs,
         "window" => PopMode::Window,
-        other => return Err(format!("unknown tab mode {other:?} (expected tabs or window)")),
+        other => {
+            return Err(format!(
+                "unknown tab mode {other:?} (expected tabs or window)"
+            ))
+        }
     };
     send(Msg::SetDefaultMode(mode))
 }
 
 #[tauri::command]
 pub fn cmd_monitors_list() -> Result<Vec<MonitorView>, String> {
-    let app = APP.get().ok_or_else(|| "window manager is not initialized".to_string())?;
+    let app = APP
+        .get()
+        .ok_or_else(|| "window manager is not initialized".to_string())?;
     let main = app
         .get_webview_window(MAIN_WINDOW_LABEL)
         .ok_or_else(|| "main window not found".to_string())?;
@@ -1733,9 +1859,10 @@ pub fn cmd_monitors_list() -> Result<Vec<MonitorView>, String> {
 /// The strip page passes the cursor position from its contextmenu event.
 #[tauri::command]
 pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
-    let app = APP.get().ok_or_else(|| "window manager is not initialized".to_string())?;
-    let Some(tab) = manager()
-        .and_then(|m| m.state.tabs().iter().find(|t| t.id == id).cloned())
+    let app = APP
+        .get()
+        .ok_or_else(|| "window manager is not initialized".to_string())?;
+    let Some(tab) = manager().and_then(|m| m.state.tabs().iter().find(|t| t.id == id).cloned())
     else {
         return Err(format!("no tab {id}"));
     };
@@ -1744,9 +1871,21 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
         .ok_or_else(|| "tab strip window not found".to_string())?;
 
     let pop_item = if matches!(tab.mode, TabMode::Inline) {
-        MenuItem::with_id(app, format!("tab-pop-out:{id}"), "Pop out", true, None::<&str>)?
+        MenuItem::with_id(
+            app,
+            format!("tab-pop-out:{id}"),
+            "Pop out",
+            true,
+            None::<&str>,
+        )?
     } else {
-        MenuItem::with_id(app, format!("tab-pop-in:{id}"), "Pop back in", true, None::<&str>)?
+        MenuItem::with_id(
+            app,
+            format!("tab-pop-in:{id}"),
+            "Pop back in",
+            true,
+            None::<&str>,
+        )?
     };
     let monitor_items: Vec<MenuItem> = {
         let main = app
@@ -1757,12 +1896,7 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
             .iter()
             .map(|m| {
                 let name = m.name().cloned().unwrap_or_else(|| "Display".to_string());
-                let label = format!(
-                    "{} ({}×{})",
-                    name,
-                    m.size().width,
-                    m.size().height
-                );
+                let label = format!("{} ({}×{})", name, m.size().width, m.size().height);
                 MenuItem::with_id(
                     app,
                     format!("tab-expand:{id}|{name}"),
@@ -1773,24 +1907,34 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
             })
             .collect::<Result<Vec<_>, _>>()?
     };
-    let expand_menu = Submenu::with_items(app, "Expand to monitor", true, &{
-        let refs: Vec<&dyn IsMenuItem<_>> = monitor_items.iter().map(|i| i as &dyn IsMenuItem<_>).collect();
-        refs
-    })?;
-    let copy_item = MenuItem::with_id(app, format!("tab-copy:{id}"), "Copy share link", true, None::<&str>)?;
-    let terminate_item = MenuItem::with_id(app, format!("tab-terminate:{id}"), "Terminate", true, None::<&str>)?;
-    let sep = PredefinedMenuItem::separator(app)?;
-
-    let menu = Menu::with_items(
+    let expand_items: Vec<&dyn IsMenuItem<tauri::Wry>> = monitor_items
+        .iter()
+        .map(|i| i as &dyn IsMenuItem<tauri::Wry>)
+        .collect();
+    let expand_menu = Submenu::with_items(app, "Expand to monitor", true, &expand_items)?;
+    let copy_item = MenuItem::with_id(
         app,
-        &[
-            &pop_item as &dyn IsMenuItem<_>,
-            &expand_menu as &dyn IsMenuItem<_>,
-            &sep as &dyn IsMenuItem<_>,
-            &copy_item as &dyn IsMenuItem<_>,
-            &terminate_item as &dyn IsMenuItem<_>,
-        ],
+        format!("tab-copy:{id}"),
+        "Copy share link",
+        true,
+        None::<&str>,
     )?;
+    let terminate_item = MenuItem::with_id(
+        app,
+        format!("tab-terminate:{id}"),
+        "Terminate",
+        true,
+        None::<&str>,
+    )?;
+    let sep = PredefinedMenuItem::separator(app)?;
+    let menu_items: Vec<&dyn IsMenuItem<tauri::Wry>> = vec![
+        &pop_item as &dyn IsMenuItem<tauri::Wry>,
+        &expand_menu as &dyn IsMenuItem<tauri::Wry>,
+        &sep as &dyn IsMenuItem<tauri::Wry>,
+        &copy_item as &dyn IsMenuItem<tauri::Wry>,
+        &terminate_item as &dyn IsMenuItem<tauri::Wry>,
+    ];
+    let menu = Menu::with_items(app, &menu_items)?;
     strip
         .popup_menu_at(&menu, tauri::LogicalPosition::new(x, y))
         .map_err(|e| e.to_string())
@@ -1883,7 +2027,9 @@ mod tests {
         // the existing inline tab only.
         assert_eq!(tab_ids(&state), vec!["aaa111", "bbb222"]);
         assert_eq!(state.active(), Some("aaa111"));
-        assert!(effects.iter().any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
         assert_eq!(state.tabs().len(), 2);
     }
 
@@ -1894,7 +2040,9 @@ mod tests {
         state.open_session(&session_url("persea.example.com", "bbb222"), None);
         let effects = state.switch("aaa111");
         assert_eq!(state.active(), Some("aaa111"));
-        assert!(effects.iter().any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
         // Next wraps around.
         state.next_tab();
         assert_eq!(state.active(), Some("bbb222"));
@@ -1910,8 +2058,12 @@ mod tests {
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
         state.open_session(&session_url("persea.example.com", "bbb222"), None);
         let effects = state.switch("aaa111");
-        assert!(effects.iter().any(|e| matches!(e, Effect::FocusWindow(l) if l == "session-aaa111")));
-        assert!(!effects.iter().any(|e| matches!(e, Effect::NavigateViewport(_))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::FocusWindow(l) if l == "session-aaa111")));
+        assert!(!effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(_))));
     }
 
     #[test]
@@ -1920,7 +2072,9 @@ mod tests {
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
         let effects = state.pop_out("aaa111");
         assert_eq!(state.view()[0].mode, "popped");
-        assert!(effects.iter().any(|e| matches!(e, Effect::OpenSessionWindow { label, .. } if label == "session-aaa111")));
+        assert!(effects.iter().any(
+            |e| matches!(e, Effect::OpenSessionWindow { label, .. } if label == "session-aaa111")
+        ));
         assert!(effects.iter().any(|e| matches!(e, Effect::SavePrefs)));
         // The viewport departure to home is shell-initiated: expected.
         assert_eq!(state.overrides().get("aaa111"), Some(&PopMode::Window));
@@ -1941,8 +2095,12 @@ mod tests {
         state.pop_out("aaa111");
         let effects = state.pop_in("aaa111");
         assert_eq!(state.view()[0].mode, "inline");
-        assert!(effects.iter().any(|e| matches!(e, Effect::CloseWindow(l) if l == "session-aaa111")));
-        assert!(effects.iter().any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::CloseWindow(l) if l == "session-aaa111")));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
         assert_eq!(state.overrides().get("aaa111"), Some(&PopMode::Tabs));
         // The window close event after pop-in must not remove the tab.
         let effects = state.note_window_closed("session-aaa111");
@@ -1964,14 +2122,24 @@ mod tests {
         let effects = state.expand("aaa111", target);
         assert_eq!(state.view()[0].mode, "expanded");
         assert_eq!(state.view()[0].monitor.as_deref(), Some("DP-1"));
-        assert!(effects.iter().any(|e| matches!(e, Effect::ExpandWindow { label, .. } if label == "session-aaa111")));
-        assert!(effects.iter().any(|e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com/")));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::ExpandWindow { label, .. } if label == "session-aaa111")));
+        assert!(effects.iter().any(
+            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com/")
+        ));
         // Restore from inline: back into the viewport.
         let effects = state.restore("aaa111");
         assert_eq!(state.view()[0].mode, "inline");
-        assert!(effects.iter().any(|e| matches!(e, Effect::UnfullscreenWindow(l) if l == "session-aaa111")));
-        assert!(effects.iter().any(|e| matches!(e, Effect::CloseWindow(l) if l == "session-aaa111")));
-        assert!(effects.iter().any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::UnfullscreenWindow(l) if l == "session-aaa111")));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::CloseWindow(l) if l == "session-aaa111")));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
     }
 
     #[test]
@@ -1999,12 +2167,16 @@ mod tests {
         let effects = state.close("bbb222");
         assert_eq!(tab_ids(&state), vec!["aaa111"]);
         assert_eq!(state.active(), Some("aaa111"));
-        assert!(effects.iter().any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(u) if u.contains("aaa111"))));
         // Closing the last tab goes home.
         let effects = state.close("aaa111");
         assert!(state.tabs().is_empty());
         assert_eq!(state.active(), None);
-        assert!(effects.iter().any(|e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com/")));
+        assert!(effects.iter().any(
+            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com/")
+        ));
     }
 
     #[test]
@@ -2013,8 +2185,12 @@ mod tests {
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
         let effects = state.close("aaa111");
         assert!(state.tabs().is_empty());
-        assert!(effects.iter().any(|e| matches!(e, Effect::CloseWindow(l) if l == "session-aaa111")));
-        assert!(!effects.iter().any(|e| matches!(e, Effect::NavigateViewport(_))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::CloseWindow(l) if l == "session-aaa111")));
+        assert!(!effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(_))));
     }
 
     #[test]
@@ -2025,10 +2201,14 @@ mod tests {
         assert_eq!(state.view()[0].status, "live");
         let effects = state.note_session_ended("aaa111");
         assert_eq!(state.view()[0].status, "ended");
-        assert!(effects.iter().any(|e| matches!(e, Effect::AutoCloseScheduled(id) if id == "aaa111")));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::AutoCloseScheduled(id) if id == "aaa111")));
         // A duplicate ended event must not schedule a second timer.
         let effects = state.note_session_ended("aaa111");
-        assert!(!effects.iter().any(|e| matches!(e, Effect::AutoCloseScheduled(_))));
+        assert!(!effects
+            .iter()
+            .any(|e| matches!(e, Effect::AutoCloseScheduled(_))));
         // The tick closes the ended tab.
         let effects = state.note_auto_close_tick("aaa111");
         assert!(state.tabs().is_empty());
@@ -2056,8 +2236,10 @@ mod tests {
         let mut state = TabState::new(PopMode::Tabs);
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
         // The page's close flow navigates to /connections.html.
-        let effects =
-            state.note_navigated(MAIN_WINDOW_LABEL, &url("https://persea.example.com/connections.html"));
+        let effects = state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &url("https://persea.example.com/connections.html"),
+        );
         assert!(state.tabs().is_empty());
         assert!(effects.iter().any(|e| matches!(e, Effect::EmitTabsChanged)));
     }
@@ -2067,8 +2249,10 @@ mod tests {
         let mut state = TabState::new(PopMode::Tabs);
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
         state.open_session(&session_url("persea.example.com", "bbb222"), None);
-        let effects =
-            state.note_navigated(MAIN_WINDOW_LABEL, &session_url("persea.example.com", "bbb222"));
+        let effects = state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &session_url("persea.example.com", "bbb222"),
+        );
         assert_eq!(tab_ids(&state), vec!["aaa111", "bbb222"]);
         assert_eq!(state.active(), Some("bbb222"));
         assert!(effects.is_empty() || effects.iter().all(|e| matches!(e, Effect::EmitTabsChanged)));
@@ -2077,14 +2261,19 @@ mod tests {
     #[test]
     fn viewport_share_link_join_registers_a_tab() {
         let mut state = TabState::new(PopMode::Tabs);
-        state.note_navigated(MAIN_WINDOW_LABEL, &url("https://persea.example.com/connections.html"));
+        state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &url("https://persea.example.com/connections.html"),
+        );
         let effects = state.note_navigated(
             MAIN_WINDOW_LABEL,
             &session_url("persea.example.com", "aaa111"),
         );
         assert_eq!(tab_ids(&state), vec!["aaa111"]);
         assert_eq!(state.active(), Some("aaa111"));
-        assert!(effects.iter().any(|e| matches!(e, Effect::NavigateViewport(_))));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(_))));
     }
 
     #[test]
@@ -2108,7 +2297,9 @@ mod tests {
             &url("https://persea.example.com/connections.html"),
         );
         assert!(state.tabs().is_empty());
-        assert!(effects.iter().any(|e| matches!(e, Effect::CloseWindow(l) if l == "session-aaa111")));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::CloseWindow(l) if l == "session-aaa111")));
     }
 
     #[test]
@@ -2140,9 +2331,13 @@ mod tests {
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
         let effects = state.note_title(MAIN_WINDOW_LABEL, "prod — 01:02:03 — ●");
         assert_eq!(state.tabs()[0].title, "prod");
-        assert!(effects.iter().any(|e| matches!(e, Effect::SetTitle { title, .. } if title == "prod")));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::SetTitle { title, .. } if title == "prod")));
         // An identical title emits nothing (no 1 Hz re-render).
-        assert!(state.note_title(MAIN_WINDOW_LABEL, "prod — 01:02:04 — ●").is_empty());
+        assert!(state
+            .note_title(MAIN_WINDOW_LABEL, "prod — 01:02:04 — ●")
+            .is_empty());
     }
 
     #[test]
@@ -2159,7 +2354,10 @@ mod tests {
             session_id_from_url(&url("https://persea.example.com/connections.html")),
             None
         );
-        assert_eq!(session_id_from_url(&url("https://persea.example.com/")), None);
+        assert_eq!(
+            session_id_from_url(&url("https://persea.example.com/")),
+            None
+        );
     }
 
     #[test]
@@ -2172,7 +2370,10 @@ mod tests {
 
     #[test]
     fn dock_placement_prefers_above_then_below_then_hidden() {
-        let work = tauri::PhysicalRect::new(0, 0, 1920, 1040);
+        let work = tauri::PhysicalRect {
+            position: (0, 0).into(),
+            size: (1920, 1040).into(),
+        };
         let main_pos = tauri::PhysicalPosition::new(100, 200);
         let main_size = tauri::PhysicalSize::new(1200, 800);
         let strip = (44, 44);
@@ -2197,19 +2398,41 @@ mod tests {
 
     #[test]
     fn dock_placement_clamps_into_the_work_area() {
-        let work = tauri::PhysicalRect::new(1920, 0, 1920, 1080);
-        let main_pos = tauri::PhysicalPosition::new(1000, 500);
+        let work = tauri::PhysicalRect {
+            position: (0, 0).into(),
+            size: (1920, 1080).into(),
+        };
+        // Inside the work area: unclamped.
+        let main_pos = tauri::PhysicalPosition::new(400, 500);
         let main_size = tauri::PhysicalSize::new(800, 600);
-        // Strip would hang off the right edge: clamped back in.
         assert_eq!(
             dock_placement(44, 44, main_pos, main_size, work),
-            DockPlacement::Above(tauri::PhysicalPosition::new(1920 + 1920 - 44, 456))
+            DockPlacement::Above(tauri::PhysicalPosition::new(400, 456))
         );
-        // Main window left of the work area: clamped right.
+        // Past the right edge: clamped so the strip still fits.
+        let main_pos = tauri::PhysicalPosition::new(1900, 500);
+        assert_eq!(
+            dock_placement(44, 44, main_pos, main_size, work),
+            DockPlacement::Above(tauri::PhysicalPosition::new(1876, 456))
+        );
+        // Left of a work area that starts at x=1920: clamped right.
+        let work = tauri::PhysicalRect {
+            position: (1920, 0).into(),
+            size: (1920, 1080).into(),
+        };
         let main_pos = tauri::PhysicalPosition::new(1700, 500);
         assert_eq!(
             dock_placement(44, 44, main_pos, main_size, work),
             DockPlacement::Above(tauri::PhysicalPosition::new(1920, 456))
+        );
+        // A strip wider than the work area is never shown.
+        let work = tauri::PhysicalRect {
+            position: (0, 0).into(),
+            size: (30, 1080).into(),
+        };
+        assert_eq!(
+            dock_placement(44, 44, main_pos, main_size, work),
+            DockPlacement::Hidden
         );
     }
 
