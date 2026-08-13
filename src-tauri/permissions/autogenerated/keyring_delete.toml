@@ -1,0 +1,10 @@
+# Automatically generated - DO NOT EDIT!
+[[permission]]
+identifier = "allow-keyring-delete"
+description = "Enables the keyring_delete command without any pre-configured scope."
+commands.allow = ["keyring_delete"]
+
+[[permission]]
+identifier = "deny-keyring-delete"
+description = "Denies the keyring_delete command without any pre-configured scope."
+commands.deny = ["keyring_delete"]
