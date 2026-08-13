@@ -75,12 +75,13 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     .inner_size(240.0, 88.0)
     .visible(false)
     .decorations(false)
-    .transparent(true)
     .skip_taskbar(true)
     .always_on_top(true)
     .focused(false)
-    .resizable(false)
-    .build()?;
+    .resizable(false);
+    #[cfg(not(target_os = "macos"))]
+    let overlay = overlay.transparent(true);
+    let overlay = overlay.build()?;
     let _ = overlay.set_ignore_cursor_events(true);
 
     let handle = app.handle().clone();
@@ -118,7 +119,12 @@ fn attach(win: &WebviewWindow) {
         }
     }
     let app = win.app_handle().clone();
-    win.on_drag_drop_event(move |win, event| handle_drag_event(&app, win, event));
+    let win = win.clone();
+    win.on_window_event(move |event| {
+        if let tauri::WindowEvent::DragDrop(dnd) = event {
+            handle_drag_event(&app, &win, dnd.clone());
+        }
+    });
 }
 
 fn is_drop_capable(label: &str) -> bool {
@@ -140,6 +146,7 @@ fn handle_drag_event(app: &AppHandle, win: &WebviewWindow, event: DragDropEvent)
             on_drop(app, win, paths, position);
         }
         DragDropEvent::Leave => hide_overlay(),
+        _ => {}
     }
 }
 
@@ -213,11 +220,12 @@ fn resolve_session(label: &str) -> Option<(String, String)> {
 fn position_overlay(win: &WebviewWindow, position: PhysicalPosition<f64>) {
     let app = win.app_handle().clone();
     let target_label = win.label().to_string();
+    let thread_app = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let Some(overlay) = app.get_webview_window(DROPZONE_WINDOW_LABEL) else {
+        let Some(overlay) = thread_app.get_webview_window(DROPZONE_WINDOW_LABEL) else {
             return;
         };
-        let Some(target) = app.get_webview_window(&target_label) else {
+        let Some(target) = thread_app.get_webview_window(&target_label) else {
             return;
         };
         let Ok(win_pos) = target.outer_position() else {
@@ -250,8 +258,9 @@ fn hide_overlay() {
         return;
     };
     let app = app.clone();
+    let thread_app = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let Some(overlay) = app.get_webview_window(DROPZONE_WINDOW_LABEL) else {
+        let Some(overlay) = thread_app.get_webview_window(DROPZONE_WINDOW_LABEL) else {
             return;
         };
         if overlay.is_visible().unwrap_or(false) {

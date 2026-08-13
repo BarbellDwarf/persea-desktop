@@ -480,7 +480,8 @@ pub fn cmd_hotkeys_get_settings() -> Result<HotkeyView, String> {
     let Some(state) = state_handle() else {
         return Err("hotkeys are not initialized".to_string());
     };
-    Ok(state.lock().unwrap().view())
+    let state = state.lock().unwrap();
+    Ok(state.view())
 }
 
 #[tauri::command]

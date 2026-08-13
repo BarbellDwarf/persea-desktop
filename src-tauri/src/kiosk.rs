@@ -251,12 +251,12 @@ pub fn enter(app: &tauri::AppHandle) {
         let _ = win.set_resizable(false);
         let _ = win.set_maximizable(false);
         win.on_window_event(move |event| {
-            if let tauri::WindowEvent::CloseRequested { signal_tx, .. } = event {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if crate::kiosk::is_active() {
                     eprintln!(
                         "[kiosk] close requests are blocked in kiosk mode; use the exit chord"
                     );
-                    let _ = signal_tx.send(true);
+                    api.prevent_close();
                 }
             }
         });

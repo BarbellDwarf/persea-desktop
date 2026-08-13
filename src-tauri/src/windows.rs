@@ -178,6 +178,12 @@ pub enum PopMode {
     Window,
 }
 
+impl Default for PopMode {
+    fn default() -> Self {
+        Self::Tabs
+    }
+}
+
 /// One session tab in the manager.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tab {
@@ -679,7 +685,7 @@ impl TabState {
         if let Some(id) = session_id_from_url(url) {
             // Entering a session page.
             if let Some(idx) = self.tabs.iter().position(|t| t.id == id) {
-                self.active = Some(id);
+                self.active = Some(id.clone());
                 if !matches!(self.tabs[idx].mode, TabMode::Inline) {
                     // The viewport now displays a session that had its own
                     // window; fold it back inline (the window close event
@@ -918,7 +924,7 @@ pub fn dock_placement(
 
 /// Extract the session id from a join URL (`/client/<id>`).
 pub fn session_id_from_url(url: &Url) -> Option<String> {
-    let mut segs = url.path_segments()?;
+    let segs = url.path_segments()?;
     let mut prev: Option<&str> = None;
     for seg in segs {
         if prev == Some("client") && !seg.is_empty() {
@@ -1290,10 +1296,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let strip = builder.build()?;
     let dock_tx = tx.clone();
     strip.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { signal_tx, .. } = event {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             // Alt+F4 on the strip hides it; the dock logic re-shows it
             // when a tab exists and the main window is active.
-            let _ = signal_tx.send(true);
+            api.prevent_close();
             let _ = dock_tx.send(Msg::DockNow);
         }
     });
@@ -1434,7 +1440,7 @@ fn expand_on_monitor(id: String, monitor: Option<String>) -> Result<(), String> 
 /// Kiosk and tray toggle for the strip. The dock logic re-evaluates on
 /// its next tick.
 pub fn set_strip_visible(visible: bool) {
-    if let Some(m) = manager() {
+    if let Some(mut m) = manager() {
         m.strip_enabled = visible;
     }
     let _ = send(Msg::DockNow);
@@ -1503,18 +1509,19 @@ fn execute_effects(app: &tauri::AppHandle, effects: Vec<Effect>) {
         return;
     }
     let app = app.clone();
+    let thread_app = app.clone();
     let _ = app.run_on_main_thread(move || {
         for effect in effects {
             match effect {
                 Effect::NavigateViewport(url) => {
-                    if let Some(win) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    if let Some(win) = thread_app.get_webview_window(MAIN_WINDOW_LABEL) {
                         if let Ok(url) = Url::parse(&url) {
                             let _ = win.navigate(url);
                         }
                     }
                 }
                 Effect::FocusViewport => {
-                    if let Some(win) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    if let Some(win) = thread_app.get_webview_window(MAIN_WINDOW_LABEL) {
                         let _ = win.set_focus();
                     }
                 }
@@ -1524,39 +1531,39 @@ fn execute_effects(app: &tauri::AppHandle, effects: Vec<Effect>) {
                     title,
                     instance,
                 } => {
-                    let _ = build_session_window(&app, &label, &url, &title, &instance);
+                    let _ = build_session_window(&thread_app, &label, &url, &title, &instance);
                 }
                 Effect::CloseWindow(label) => {
-                    if let Some(win) = app.get_webview_window(&label) {
+                    if let Some(win) = thread_app.get_webview_window(&label) {
                         let _ = win.destroy();
                     }
                 }
                 Effect::FocusWindow(label) => {
-                    if let Some(win) = app.get_webview_window(&label) {
+                    if let Some(win) = thread_app.get_webview_window(&label) {
                         let _ = win.set_focus();
                     }
                 }
                 Effect::SetTitle { label, title } => {
-                    if let Some(win) = app.get_webview_window(&label) {
+                    if let Some(win) = thread_app.get_webview_window(&label) {
                         let _ = win.set_title(&title);
                     }
                 }
                 Effect::ExpandWindow { label, target } => {
-                    if let Some(win) = app.get_webview_window(&label) {
+                    if let Some(win) = thread_app.get_webview_window(&label) {
                         let _ = win.set_position(tauri::PhysicalPosition::new(target.x, target.y));
                         let _ = win.set_size(tauri::PhysicalSize::new(target.width, target.height));
                         let _ = win.set_fullscreen(true);
                     }
                 }
                 Effect::UnfullscreenWindow(label) => {
-                    if let Some(win) = app.get_webview_window(&label) {
+                    if let Some(win) = thread_app.get_webview_window(&label) {
                         let _ = win.set_fullscreen(false);
                     }
                 }
-                Effect::DockStrip => dock_strip(&app),
+                Effect::DockStrip => dock_strip(&thread_app),
                 Effect::EmitTabsChanged => {
                     let tabs = manager().map(|m| m.state.view()).unwrap_or_default();
-                    let _ = app.emit_to(
+                    let _ = thread_app.emit_to(
                         EventTarget::webview_window(STRIP_WINDOW_LABEL),
                         EVENT_TABS_CHANGED,
                         tabs,
@@ -1698,8 +1705,9 @@ fn dock_strip(app: &tauri::AppHandle) {
         }
     };
     let app = app.clone();
+    let thread_app = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let Some(strip) = app.get_webview_window(STRIP_WINDOW_LABEL) else {
+        let Some(strip) = thread_app.get_webview_window(STRIP_WINDOW_LABEL) else {
             return;
         };
         match action {
@@ -1892,7 +1900,8 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
             "Pop out",
             true,
             None::<&str>,
-        )?
+        )
+        .map_err(|e| e.to_string())?
     } else {
         MenuItem::with_id(
             app,
@@ -1900,9 +1909,10 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
             "Pop back in",
             true,
             None::<&str>,
-        )?
+        )
+        .map_err(|e| e.to_string())?
     };
-    let monitor_items: Vec<MenuItem> = {
+    let monitor_items: Vec<MenuItem<tauri::Wry>> = {
         let main = app
             .get_webview_window(MAIN_WINDOW_LABEL)
             .ok_or_else(|| "main window not found".to_string())?;
@@ -1919,6 +1929,7 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
                     true,
                     None::<&str>,
                 )
+                .map_err(|e| e.to_string())
             })
             .collect::<Result<Vec<_>, _>>()?
     };
@@ -1926,22 +1937,25 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
         .iter()
         .map(|i| i as &dyn IsMenuItem<tauri::Wry>)
         .collect();
-    let expand_menu = Submenu::with_items(app, "Expand to monitor", true, &expand_items)?;
+    let expand_menu = Submenu::with_items(app, "Expand to monitor", true, &expand_items)
+        .map_err(|e| e.to_string())?;
     let copy_item = MenuItem::with_id(
         app,
         format!("tab-copy:{id}"),
         "Copy share link",
         true,
         None::<&str>,
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
     let terminate_item = MenuItem::with_id(
         app,
         format!("tab-terminate:{id}"),
         "Terminate",
         true,
         None::<&str>,
-    )?;
-    let sep = PredefinedMenuItem::separator(app)?;
+    )
+    .map_err(|e| e.to_string())?;
+    let sep = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
     let menu_items: Vec<&dyn IsMenuItem<tauri::Wry>> = vec![
         &pop_item as &dyn IsMenuItem<tauri::Wry>,
         &expand_menu as &dyn IsMenuItem<tauri::Wry>,
@@ -1949,7 +1963,7 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
         &copy_item as &dyn IsMenuItem<tauri::Wry>,
         &terminate_item as &dyn IsMenuItem<tauri::Wry>,
     ];
-    let menu = Menu::with_items(app, &menu_items)?;
+    let menu = Menu::with_items(app, &menu_items).map_err(|e| e.to_string())?;
     strip
         .popup_menu_at(&menu, tauri::LogicalPosition::new(x, y))
         .map_err(|e| e.to_string())

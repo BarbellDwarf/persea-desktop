@@ -63,7 +63,7 @@ pub fn run() {
                 .map(|i| i.url.clone())
                 .collect();
             let default_url = origins.first().cloned().unwrap_or_default();
-            let policy = navigation::NavigationPolicy::new(origins.clone(), Vec::new());
+            let _policy = navigation::NavigationPolicy::new(origins.clone(), Vec::new());
             let (store_id, data_dir) = windows::instance_webview_data(app.handle(), &default_url);
             let builder =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))

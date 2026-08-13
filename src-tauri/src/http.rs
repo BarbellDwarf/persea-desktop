@@ -408,7 +408,7 @@ pub(crate) mod test_mock {
     }
 
     fn handle_connection(
-        stream: TcpStream,
+        mut stream: TcpStream,
         requests: &Mutex<Vec<MockRequest>>,
         script: &Mutex<MockScript>,
     ) {

@@ -43,7 +43,7 @@ use tauri::menu::{
     CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
 };
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::instances;
 use crate::poller::is_terminal;
@@ -305,7 +305,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .map_err(|_| menu_error("tray state is locked"))?
         .clone();
     let instances = instances::instances();
-    let mut items: Vec<&dyn IsMenuItem> = Vec::new();
+    let mut items: Vec<&dyn IsMenuItem<tauri::Wry>> = Vec::new();
     if instances.is_empty() {
         let add = MenuItem::with_id(app, "open-settings", "Add instance…", true, None::<&str>)?;
         items.push(&add);
@@ -343,7 +343,7 @@ fn build_instance_submenu(
     instance: &instances::Instance,
 ) -> tauri::Result<Submenu<tauri::Wry>> {
     let url = instance.url.trim_end_matches('/').to_string();
-    let mut items: Vec<&dyn IsMenuItem> = Vec::new();
+    let mut items: Vec<&dyn IsMenuItem<tauri::Wry>> = Vec::new();
     let sessions = state.sessions.get(&url).cloned().unwrap_or_default();
     if sessions.is_empty() {
         let empty = MenuItem::with_id(
@@ -435,8 +435,9 @@ fn prettify_status(status: &str) -> String {
         "error" => "Error",
         "expired" => "Expired",
         "logged_out" => "Logged out",
-        other => other.to_string(),
+        other => other,
     }
+    .to_string()
 }
 
 // ---------------------------------------------------------------------------

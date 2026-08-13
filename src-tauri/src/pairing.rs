@@ -59,7 +59,7 @@ use std::time::{Duration, Instant};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::http;
 use crate::instances;
@@ -1020,7 +1020,7 @@ mod tests {
             token_id: id,
             token_name: name.to_string(),
             device_name: "dev-box".to_string(),
-            created_at: id,
+            created_at: id as u64,
         }
     }
 
@@ -1049,7 +1049,7 @@ mod tests {
 
     #[test]
     fn registry_corrupt_file_is_backed_up() {
-        let mut registry = temp_registry("corrupt");
+        let registry = temp_registry("corrupt");
         std::fs::write(&registry.path, "{ not json").expect("write corrupt");
         let loaded = TokenRegistry::load(registry.path.clone());
         assert!(loaded.file.tokens.is_empty());

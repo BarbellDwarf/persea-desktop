@@ -530,10 +530,11 @@ pub fn start(app: &AppHandle) {
             for url in &desired {
                 if !running.contains_key(url) {
                     let handle = app.clone();
+                    let url = url.clone();
                     running.insert(
                         url.clone(),
                         tauri::async_runtime::spawn(async move {
-                            run_instance(handle, url.clone()).await;
+                            run_instance(handle, url).await;
                         }),
                     );
                 }

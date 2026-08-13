@@ -46,6 +46,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 /// App id used for Windows toast AUMID matching; ignored elsewhere.
+#[cfg(target_os = "windows")]
 const APP_ID: &str = "dev.persea.desktop";
 /// App name shown in the notification header.
 const APP_NAME: &str = "Persea Desktop";
@@ -157,7 +158,7 @@ pub fn notifications_set_enabled(app: AppHandle, enabled: bool) -> Result<bool, 
 
 /// One toast. Returns the notification daemon's verdict as a log line;
 /// failures are never fatal.
-fn notify(app: &AppHandle, summary: &str, body: &str, image_path: Option<&str>) {
+fn notify(_app: &AppHandle, summary: &str, body: &str, image_path: Option<&str>) {
     if !enabled() {
         return;
     }
@@ -167,7 +168,7 @@ fn notify(app: &AppHandle, summary: &str, body: &str, image_path: Option<&str>) 
     #[cfg(target_os = "macos")]
     {
         // AppKit requires notifications from the main thread.
-        let app = app.clone();
+        let app = _app.clone();
         let _ = app.run_on_main_thread(move || {
             post(&summary, &body, image_path.as_deref());
         });
@@ -178,15 +179,15 @@ fn notify(app: &AppHandle, summary: &str, body: &str, image_path: Option<&str>) 
 
 #[cfg(not(test))]
 fn post(summary: &str, body: &str, image_path: Option<&str>) {
-    let notification = notify_rust::Notification::new()
-        .summary(summary)
-        .body(body)
-        .appname(APP_NAME)
-        .app_id(APP_ID);
-    let notification = match image_path {
-        Some(path) => notification.image_path(path),
-        None => notification,
-    };
+    let mut notification = notify_rust::Notification::new();
+    notification.summary(summary);
+    notification.body(body);
+    notification.appname(APP_NAME);
+    #[cfg(target_os = "windows")]
+    notification.app_id(APP_ID);
+    if let Some(path) = image_path {
+        notification.image_path(path);
+    }
     if let Err(e) = notification.show() {
         eprintln!("persea-desktop: notification failed: {e}");
     }
@@ -197,14 +198,14 @@ fn post(_summary: &str, _body: &str, _image_path: Option<&str>) {}
 
 /// The unconditional alert: fires even while notifications are disabled.
 /// The poller calls this once per instance per sign-out.
-pub fn relogin_needed(app: &AppHandle, instance_name: &str) {
+pub fn relogin_needed(_app: &AppHandle, instance_name: &str) {
     let summary = "Re-login needed".to_string();
     let body = format!(
         "{instance_name} rejected the session token. Pair this device again to resume alerts."
     );
     #[cfg(target_os = "macos")]
     {
-        let app = app.clone();
+        let app = _app.clone();
         let _ = app.run_on_main_thread(move || {
             post(&summary, &body, None);
         });

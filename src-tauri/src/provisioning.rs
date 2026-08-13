@@ -455,11 +455,16 @@ pub fn settings_override(key: &str) -> Option<serde_json::Value> {
 /// All locked shell-settings overrides (empty when the document pins
 /// none). The settings page merges these over the user settings.
 pub fn settings_overrides() -> serde_json::Map<String, serde_json::Value> {
-    ACTIVE
-        .lock()
-        .ok()
-        .and_then(|a| a.as_ref())
-        .and_then(|e| e.doc.settings.as_object())
+    let Ok(guard) = ACTIVE.lock() else {
+        return Default::default();
+    };
+    let Some(effective) = (*guard).as_ref() else {
+        return Default::default();
+    };
+    effective
+        .doc
+        .settings
+        .as_object()
         .cloned()
         .unwrap_or_default()
 }

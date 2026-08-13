@@ -1094,7 +1094,7 @@ pub fn conflict_prompt(app: &AppHandle, remote: &str) -> ConflictChoice {
                 "Rename".to_string(),
                 "Cancel".to_string(),
             ))
-            .blocking_show()
+            .blocking_show_with_result()
     }));
     match result {
         Err(_) => ConflictChoice::Cancel,
@@ -1145,8 +1145,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 /// starts). Window operations run on the main thread.
 pub fn show_transfer_window(app: &AppHandle) {
     let app = app.clone();
+    let thread_app = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if let Some(win) = app.get_webview_window(TRANSFER_WINDOW_LABEL) {
+        if let Some(win) = thread_app.get_webview_window(TRANSFER_WINDOW_LABEL) {
             let _ = win.show();
             let _ = win.set_focus();
         }
