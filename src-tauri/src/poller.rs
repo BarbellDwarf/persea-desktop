@@ -339,7 +339,9 @@ impl SseParser {
 fn parse_rfc3339_epoch(raw: &str) -> Option<u64> {
     let raw = raw.trim();
     let (date, rest) = raw.split_once('T')?;
-    let rest = rest.strip_suffix('Z').or_else(|| rest.strip_suffix("+00:00"))?;
+    let rest = rest
+        .strip_suffix('Z')
+        .or_else(|| rest.strip_suffix("+00:00"))?;
     let time = rest.split_once('.').map(|(t, _)| t).unwrap_or(rest);
     let mut date_parts = date.split('-');
     let year: i64 = date_parts.next()?.parse().ok()?;
@@ -356,7 +358,12 @@ fn parse_rfc3339_epoch(raw: &str) -> Option<u64> {
         return None;
     }
     let days = days_from_civil(year, month, day)?;
-    Some((days * 86_400) as u64 + u64::from(hour) * 3_600 + u64::from(minute) * 60 + u64::from(second))
+    Some(
+        (days * 86_400) as u64
+            + u64::from(hour) * 3_600
+            + u64::from(minute) * 60
+            + u64::from(second),
+    )
 }
 
 /// Howard Hinnant's days-from-civil algorithm, inverted: civil date to
@@ -648,7 +655,10 @@ async fn tick_poll(
     state: &mut InstanceState,
 ) -> TickOutcome {
     let fresh = state.engine.views().is_empty();
-    let result = match http::shell_http().get(url, "/api/sessions", Some(token)).await {
+    let result = match http::shell_http()
+        .get(url, "/api/sessions", Some(token))
+        .await
+    {
         Ok(result) => result,
         Err(_) => return TickOutcome::Transient,
     };
@@ -692,12 +702,7 @@ async fn tick_poll(
 /// timeout (`session_idle_timeout_secs` is a config value the list
 /// endpoint does not carry). Best effort: a failure just leaves the
 /// cache empty (no idle warnings, "where derivable").
-async fn discover_idle_limit(
-    app: &AppHandle,
-    url: &str,
-    token: &str,
-    state: &mut InstanceState,
-) {
+async fn discover_idle_limit(app: &AppHandle, url: &str, token: &str, state: &mut InstanceState) {
     let live = state
         .engine
         .views()
@@ -1064,9 +1069,7 @@ mod tests {
     fn non_terminal_transitions_are_quiet() {
         let mut engine = DiffEngine::new();
         engine.seed(&[view("a", "pending", "db")]);
-        assert!(engine
-            .apply(&[view("a", "active", "db")], 1000)
-            .is_empty());
+        assert!(engine.apply(&[view("a", "active", "db")], 1000).is_empty());
         assert!(engine
             .apply(&[view("a", "disconnected", "db")], 1010)
             .is_empty());
@@ -1078,7 +1081,9 @@ mod tests {
         engine.seed(&[]);
         // A session that appears already-ended (e.g. the seed missed it):
         // no notification.
-        assert!(engine.apply(&[view("a", "completed", "db")], 1000).is_empty());
+        assert!(engine
+            .apply(&[view("a", "completed", "db")], 1000)
+            .is_empty());
     }
 
     #[test]
@@ -1094,7 +1099,9 @@ mod tests {
         let deltas = engine.apply_event(&event(2, "session_ended", "a", "completed"), 1010);
         assert_eq!(deltas.len(), 1);
         // ...the catch-up poll after an SSE drop sees it too: quiet.
-        assert!(engine.apply(&[view("a", "completed", "db")], 1015).is_empty());
+        assert!(engine
+            .apply(&[view("a", "completed", "db")], 1015)
+            .is_empty());
     }
 
     #[test]
@@ -1200,9 +1207,8 @@ mod tests {
     #[test]
     fn parser_handles_full_frames() {
         let mut parser = SseParser::new();
-        let frames = parser.feed(
-            b"id: 7\nevent: session_started\ndata: {\"ok\":true}\n\n: ping\n\nid: 8\n",
-        );
+        let frames =
+            parser.feed(b"id: 7\nevent: session_started\ndata: {\"ok\":true}\n\n: ping\n\nid: 8\n");
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].id.as_deref(), Some("7"));
         assert_eq!(frames[0].event.as_deref(), Some("session_started"));
@@ -1253,7 +1259,10 @@ mod tests {
 
     #[test]
     fn rfc3339_parsing() {
-        assert_eq!(parse_rfc3339_epoch("2026-08-13T00:00:00Z"), Some(1786579200));
+        assert_eq!(
+            parse_rfc3339_epoch("2026-08-13T00:00:00Z"),
+            Some(1786579200)
+        );
         assert_eq!(
             parse_rfc3339_epoch("2026-08-13T00:00:00.123456Z"),
             Some(1786579200)
@@ -1319,10 +1328,7 @@ mod tests {
 
     #[test]
     fn tray_sessions_build_absolute_urls() {
-        let views = vec![
-            view("b", "active", "z"),
-            view("a", "completed", "a"),
-        ];
+        let views = vec![view("b", "active", "z"), view("a", "completed", "a")];
         let sessions = tray_sessions("https://persea.example.com/", views);
         assert_eq!(sessions.len(), 2);
         assert_eq!(sessions[0].id, "a");

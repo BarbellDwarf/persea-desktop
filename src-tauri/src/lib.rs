@@ -9,10 +9,13 @@ mod instances;
 mod keyring;
 mod kiosk;
 mod navigation;
+mod notify;
 mod pairing;
+mod poller;
 mod provisioning;
 mod shell_config;
 mod transfer;
+mod tray;
 mod windows;
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
@@ -102,6 +105,12 @@ pub fn run() {
             transfer::setup(app)?;
             drop::setup(app)?;
 
+            // Tray + poller + notifications: skipped in kiosk (the kiosk
+            // module forbids the tray while active).
+            if !kiosk::is_active() {
+                tray::setup(app)?;
+            }
+
             // Auto-open the default/last instance now that the window
             // exists (the same call auto_open made early was a silent
             // no-op).
@@ -156,6 +165,8 @@ pub fn run() {
             transfer::cmd_transfer_open_folder,
             transfer::cmd_transfer_clear_finished,
             transfer::cmd_transfer_download,
+            notify::notifications_get_enabled,
+            notify::notifications_set_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persea Desktop");

@@ -307,13 +307,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu> {
     let instances = instances::instances();
     let mut items: Vec<&dyn IsMenuItem> = Vec::new();
     if instances.is_empty() {
-        let add = MenuItem::with_id(
-            app,
-            "open-settings",
-            "Add instance…",
-            true,
-            None::<&str>,
-        )?;
+        let add = MenuItem::with_id(app, "open-settings", "Add instance…", true, None::<&str>)?;
         items.push(&add);
     } else {
         for instance in &instances {
@@ -535,12 +529,16 @@ mod tests {
             state.signed_out.insert((*url).to_string());
         }
         for (url, id, status) in sessions {
-            state.sessions.entry((*url).to_string()).or_default().push(TraySession {
-                id: (*id).to_string(),
-                name: (*id).to_string(),
-                status: (*status).to_string(),
-                url: format!("https://{url}/client/{id}"),
-            });
+            state
+                .sessions
+                .entry((*url).to_string())
+                .or_default()
+                .push(TraySession {
+                    id: (*id).to_string(),
+                    name: (*id).to_string(),
+                    status: (*status).to_string(),
+                    url: format!("https://{url}/client/{id}"),
+                });
         }
         state
     }
@@ -599,7 +597,10 @@ mod tests {
             let mut sessions = state.sessions[url].clone();
             sessions.sort_by(|a, b| a.id.cmp(&b.id));
             for session in &sessions {
-                parts.push(format!("{}|{}|{}|{}", url, session.id, session.status, session.url));
+                parts.push(format!(
+                    "{}|{}|{}|{}",
+                    url, session.id, session.status, session.url
+                ));
             }
         }
         parts.join(";")

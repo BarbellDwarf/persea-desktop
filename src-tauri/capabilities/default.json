@@ -51,6 +51,8 @@
     "allow-cmd-transfer-retry",
     "allow-cmd-transfer-open-folder",
     "allow-cmd-transfer-clear-finished",
-    "allow-cmd-transfer-download"
+    "allow-cmd-transfer-download",
+    "allow-notifications-get-enabled",
+    "allow-notifications-set-enabled"
   ]
 }
