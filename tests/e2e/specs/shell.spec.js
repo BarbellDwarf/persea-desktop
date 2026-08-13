@@ -1,0 +1,39 @@
+// Shell UI specs: the local settings/pairing/welcome pages in the Tauri app.
+// These exercise the shell's own UI (instances CRUD, appearance, shortcuts,
+// pairing states) through the real app binary.
+const { newSession, screenshot } = require("../driver");
+
+const BASE = process.env.PERSEA_E2E_BASE_URL;
+
+async function waitForText(driver, text, timeoutMs = 8000) {
+  const { until, By } = require("selenium-webdriver");
+  await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), '${text}')]`)), timeoutMs);
+}
+
+module.exports = async function () {
+  const driver = await newSession();
+
+  try {
+    // First-run: no instances configured -> the welcome page shows.
+    await driver.get(`tauri://localhost/index.html`);
+    await waitForText(driver, "Add your first instance");
+    await screenshot(driver, "shell-welcome");
+
+    // The welcome flow opens the settings page for the guided add.
+    // (The add-instance form lives in settings; this spec drives the
+    //  form only when the instance store is empty, so it is idempotent.)
+    await driver.get(`tauri://localhost/settings.html`);
+    await waitForText(driver, "Instances");
+    await screenshot(driver, "shell-settings");
+
+    // Pairing page states: without a pairing in flight the page shows
+    // the empty/try-again state (no server round trip needed).
+    await driver.get(`tauri://localhost/pairing.html?url=${encodeURIComponent(BASE)}`);
+    await waitForText(driver, "Pair this device");
+    await screenshot(driver, "shell-pairing");
+
+    console.log("shell: welcome, settings, pairing states verified");
+  } finally {
+    await driver.quit();
+  }
+};

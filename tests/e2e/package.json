@@ -1,0 +1,12 @@
+{
+  "name": "persea-desktop-e2e",
+  "private": true,
+  "version": "1.2.0",
+  "description": "End-to-end tests for Persea Desktop via tauri-driver (WebDriver)",
+  "scripts": {
+    "test": "node run-specs.js"
+  },
+  "dependencies": {
+    "selenium-webdriver": "^4.25.0"
+  }
+}
