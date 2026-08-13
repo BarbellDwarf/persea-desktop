@@ -1,0 +1,679 @@
+/* Persea Desktop shell design tokens and components (D02).
+ *
+ * Shared by ALL shell pages (index.html, settings.html, and later
+ * windows). The tokens mirror the persea web UI language
+ * (static/css/app.css + templates/pages/client.html): same accent
+ * family (#5bc0be teal / emerald), same card/button/input vocabulary,
+ * WCAG AA contrast in both themes. No per-page styling drift: a page
+ * adds structure, never its own palette.
+ *
+ * Theme application: `:root` is dark by default; `html.light` forces
+ * light; `html.dark` forces dark; no class = "auto" (follow the OS via
+ * prefers-color-scheme). JS (app.js initTheme) sets the class from the
+ * persisted appearance setting.
+ */
+
+:root {
+  color-scheme: dark;
+  /* Surface */
+  --bg-primary: #0a0f1a;
+  --bg-secondary: #111827;
+  --bg-card: #1a2332;
+  --bg-input: #1e293b;
+  --bg-hover: #253040;
+  --border: #2a3548;
+  --border-focus: #5bc0be;
+  /* Text */
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #8b98a5;
+  /* Accent (teal, web client's --accent) */
+  --accent: #5bc0be;
+  --accent-hover: #4aa3a1;
+  --accent-strong: #7fd4d2;
+  --accent-ink: #052a2c;
+  /* Status */
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.1);
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.1);
+  --success: #34d399;
+  --success-bg: rgba(52, 211, 153, 0.1);
+  --info: #60a5fa;
+  --info-bg: rgba(96, 165, 250, 0.1);
+  /* Shape + type */
+  --radius: 10px;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  /* D01 styles.css compatibility names */
+  --bg: #0a0f1a;
+  --fg: #f1f5f9;
+  --muted: #8b98a5;
+}
+
+/* Auto = follow OS (no class) */
+@media (prefers-color-scheme: light) {
+  :root:not(.dark) {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --bg-input: #f1f5f9;
+    --bg-hover: #f1f5f9;
+    --border: #e2e8f0;
+    --border-focus: #0f766e;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #64748b;
+    --accent: #5bc0be;
+    --accent-hover: #4aa3a1;
+    --accent-strong: #0f766e;
+    --accent-ink: #052a2c;
+    --danger: #b91c1c;
+    --danger-bg: rgba(185, 28, 28, 0.08);
+    --warning: #b45309;
+    --warning-bg: rgba(180, 83, 9, 0.1);
+    --success: #047857;
+    --success-bg: rgba(4, 120, 87, 0.1);
+    --info: #1d4ed8;
+    --info-bg: rgba(29, 78, 216, 0.08);
+    --bg: #f8fafc;
+    --fg: #1e293b;
+    --muted: #64748b;
+  }
+}
+
+html.light {
+  color-scheme: light;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-input: #f1f5f9;
+  --bg-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --border-focus: #0f766e;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #64748b;
+  --accent: #5bc0be;
+  --accent-hover: #4aa3a1;
+  --accent-strong: #0f766e;
+  --accent-ink: #052a2c;
+  --danger: #b91c1c;
+  --danger-bg: rgba(185, 28, 28, 0.08);
+  --warning: #b45309;
+  --warning-bg: rgba(180, 83, 9, 0.1);
+  --success: #047857;
+  --success-bg: rgba(4, 120, 87, 0.1);
+  --info: #1d4ed8;
+  --info-bg: rgba(29, 78, 216, 0.08);
+  --bg: #f8fafc;
+  --fg: #1e293b;
+  --muted: #64748b;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                               */
+/* ------------------------------------------------------------------ */
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.hidden {
+  display: none !important;
+}
+
+a {
+  color: var(--accent-strong);
+}
+
+a:focus-visible {
+  outline-color: var(--border-focus);
+}
+
+/* ------------------------------------------------------------------ */
+/* Buttons                                                            */
+/* ------------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-accent:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: var(--danger-bg);
+}
+
+/* ------------------------------------------------------------------ */
+/* Forms                                                              */
+/* ------------------------------------------------------------------ */
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+input[type="text"],
+input[type="url"],
+input[type="password"] {
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+input[type="text"]:focus,
+input[type="url"]:focus,
+input[type="password"]:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+
+input[readonly] {
+  color: var(--text-muted);
+}
+
+.field-note {
+  margin: 0.3rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.radio-group label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.radio-group input[type="radio"] {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings page                                                      */
+/* ------------------------------------------------------------------ */
+
+.settings-page {
+  min-height: 100vh;
+}
+
+.settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-header h1 {
+  margin: 0;
+  font-size: 1.125rem;
+  letter-spacing: 0.02em;
+}
+
+.settings-header .header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.settings-sections {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.settings-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.25rem 1.5rem;
+}
+
+.settings-section h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.section-desc {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.settings-section > .btn {
+  margin-top: 0.75rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Instance list                                                      */
+/* ------------------------------------------------------------------ */
+
+.instance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.instance-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+}
+
+.instance-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.instance-name-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.instance-name {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.instance-url {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.instance-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-strong);
+}
+
+.instance-default input[type="radio"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.instance-status {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.instance-status.ok {
+  color: var(--success);
+}
+
+.instance-status.warn {
+  color: var(--warning);
+}
+
+.instance-status.offline {
+  color: var(--danger);
+}
+
+.instance-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.cap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+}
+
+.chip.on {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.chip.off {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.status-warnings {
+  margin: 0.45rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.status-warnings li {
+  font-size: 0.75rem;
+  color: var(--warning);
+}
+
+.setup-banner {
+  margin-top: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+
+.setup-banner .btn {
+  margin-left: auto;
+}
+
+.update-note {
+  margin-top: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--accent-strong);
+}
+
+.empty-state {
+  padding: 1.25rem;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dialog (native, Esc closes)                                        */
+/* ------------------------------------------------------------------ */
+
+dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  padding: 1.25rem;
+}
+
+dialog::backdrop {
+  background: rgba(2, 6, 12, 0.55);
+}
+
+dialog h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.dialog-desc {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Placeholder blocks (sections owned by later tickets)               */
+/* ------------------------------------------------------------------ */
+
+.placeholder-block {
+  padding: 0.9rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ */
+/* About                                                              */
+/* ------------------------------------------------------------------ */
+
+.about {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.about-tile {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  margin-bottom: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.about h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.about-version {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.about-min-server {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.6rem;
+  font-size: 0.8125rem;
+}
+
+.about-license {
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* Welcome / first run (index.html)                                   */
+/* ------------------------------------------------------------------ */
+
+.welcome {
+  max-width: 34rem;
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: left;
+}
+
+.welcome h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.125rem;
+}
+
+.welcome-desc {
+  margin: 0 0 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.welcome-desc code {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.welcome-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.welcome-probe {
+  margin-top: 1rem;
+}
+
+.probe-pending {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.probe-error {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--danger);
+  line-height: 1.5;
+}
+
+.welcome-open {
+  margin-top: 1rem;
+}
+
+.app-chrome {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.75rem;
+}

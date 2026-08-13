@@ -5,12 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Persea Desktop</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="settings.css">
 </head>
 <body>
   <main class="shell">
     <h1>Persea Desktop</h1>
     <p class="tagline">Remote access, in a window.</p>
-    <p class="placeholder">Shell scaffold (D01). Instance handling lands in D02: run the app against a local persea server with <code>./scripts/dev.sh</code>.</p>
+
+    <div id="welcome" class="welcome hidden">
+      <h2>Add your first server</h2>
+      <p class="welcome-desc">
+        Persea Desktop connects to a persea server: point it at the web app
+        of an instance you already run, such as <code>https://your-server</code>.
+        Each server keeps its own login and sessions in a separate store.
+      </p>
+      <form id="welcome-form" class="welcome-form" autocomplete="off">
+        <label for="welcome-name">Name
+          <input id="welcome-name" name="name" type="text" required placeholder="Production" autocomplete="off">
+        </label>
+        <label for="welcome-url">URL
+          <input id="welcome-url" name="url" type="url" required placeholder="https://persea.example.com" autocomplete="url">
+        </label>
+        <button type="submit" class="btn btn-accent">Add server</button>
+      </form>
+      <div id="welcome-probe" class="welcome-probe" aria-live="polite"></div>
+      <button id="welcome-open" type="button" class="btn btn-accent welcome-open hidden">
+        Open server
+      </button>
+    </div>
+
+    <div class="app-chrome">
+      <button id="btn-settings" type="button" class="btn btn-ghost">Settings</button>
+    </div>
     <p class="version" id="app-version"></p>
   </main>
   <script src="app.js"></script>

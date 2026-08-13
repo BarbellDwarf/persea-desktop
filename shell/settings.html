@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings · Persea Desktop</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body class="settings-page">
+  <header class="settings-header">
+    <h1>Settings</h1>
+    <div class="header-actions">
+      <button id="btn-open-default" type="button" class="btn btn-accent">Open server</button>
+      <a class="btn btn-ghost" href="index.html">Home</a>
+    </div>
+  </header>
+
+  <main class="settings-sections">
+    <section class="settings-section" id="sec-instances" aria-labelledby="sec-instances-title">
+      <h2 id="sec-instances-title">Instances</h2>
+      <p class="section-desc">
+        The persea servers this app connects to. Each instance keeps its own
+        login, sessions and settings in a separate data store, so signing in
+        to one never touches another.
+      </p>
+      <div id="instance-list" class="instance-list" aria-live="polite"></div>
+      <button id="btn-add-instance" type="button" class="btn btn-accent">Add server</button>
+    </section>
+
+    <section class="settings-section" id="sec-appearance" aria-labelledby="sec-appearance-title">
+      <h2 id="sec-appearance-title">Appearance</h2>
+      <p class="section-desc">
+        Shell theme. Each server keeps its own web theme inside the window;
+        this only affects the app's own pages.
+      </p>
+      <fieldset class="radio-group" id="appearance-group">
+        <legend class="visually-hidden">Appearance</legend>
+        <label><input type="radio" name="appearance" value="light"> Light</label>
+        <label><input type="radio" name="appearance" value="dark"> Dark</label>
+        <label><input type="radio" name="appearance" value="auto"> Auto (follow the system)</label>
+      </fieldset>
+    </section>
+
+    <section class="settings-section" id="sec-shortcuts" aria-labelledby="sec-shortcuts-title">
+      <h2 id="sec-shortcuts-title">Shortcuts</h2>
+      <p class="section-desc">Keyboard shortcut customization.</p>
+      <div class="placeholder-block">Shortcut management arrives in a later release (D09).</div>
+    </section>
+
+    <section class="settings-section" id="sec-notifications" aria-labelledby="sec-notifications-title">
+      <h2 id="sec-notifications-title">Notifications</h2>
+      <p class="section-desc">Tray icon and session alerts while the app runs in the background.</p>
+      <div class="placeholder-block">Tray notifications arrive in a later release (D08).</div>
+    </section>
+
+    <section class="settings-section" id="sec-kiosk" aria-labelledby="sec-kiosk-title">
+      <h2 id="sec-kiosk-title">Kiosk</h2>
+      <p class="section-desc">
+        Locks the window to a single instance. The kiosk option appears
+        only for servers whose probe reports kiosk support.
+      </p>
+      <div class="placeholder-block">Kiosk mode arrives in a later release (D12).</div>
+
+      <div class="pairing-placeholder" style="margin-top:1rem">
+        <label for="pairing-code">Device pairing code</label>
+        <div class="pairing-row" style="display:flex;gap:0.5rem;margin-top:0.35rem">
+          <input id="pairing-code" type="text" readonly value="················" style="flex:1;font-family:var(--font-mono)">
+          <button id="btn-copy-code" type="button" class="btn btn-ghost">Copy</button>
+        </div>
+        <p class="field-note">
+          Placeholder field that exercises the shell clipboard path; the
+          pairing flow itself arrives in a later release (D07).
+        </p>
+      </div>
+    </section>
+
+    <section class="settings-section" id="sec-updates" aria-labelledby="sec-updates-title">
+      <h2 id="sec-updates-title">Updates</h2>
+      <p class="section-desc">Application updates and the update channel.</p>
+      <div class="placeholder-block">Automatic updates arrive in a later release (D13).</div>
+    </section>
+
+    <section class="settings-section" id="sec-about" aria-labelledby="sec-about-title">
+      <h2 id="sec-about-title" class="visually-hidden">About</h2>
+      <div class="about">
+        <img class="about-tile" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAIz0lEQVR42u3VMQ0AIAxFQURgAyOsGEIpWpDAwtC0l5yCBv5rfQ0ACmpOACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACACAArgAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgAgAK4AIAAACAAAAgCAAAAgAAAIAAACAIHNs59cCQGAhOP+i2sjAJB/61UBAQBzLwkIABh9MUAAwOiLAQIARl8MEACw+0qAAIDdVwIEALuPEiAA2H2UAAHA9CMDCAB2HyVAADD9yAACgOlHBhAATD8ygABg+pEBBADTjwwgAJh+ZAABwPQjAwgApl8GQAAw/TIAAoD11wAEwAkw/TKAAGD6kQEEAOuPBiAAmH5kAAHA+qMBCACmHxlAALD+aAACgPVHAxAATD8ygABg/dEABADrjwYgAJh+ZAABwPqjAQgA1h8NQACw/mgAAoD1RwMQAKw/GoAAYP3RAATA9IMMIADWHzQAAbD+oAEIgPUHDUAArD9oAAJg/UEDBADrDxogAFh/0AABwPqDBggAAgACIABYf9AAAcD6gwYIANYfNEAAsP6gAQKA9UcDEACsPxqAAGD90QAEAAFAABAArD8agABYf9AABMD6gwYgAAIAAoAAWH/QAATA+oMGIADWHzQAARAAEAAEwPqDBiAA1h80AAEQABAAAXAF6w8aIABYf9AAAUAAQAAEAOsPGiAACAAIgABg/UEDBADrDxogAAgACIAAYP1BAwQAAQABEADrD2iAAAgAIAACYP0BDRAAAQAshgBYf9AABEAAQAAQAOsPGoAACAAIAAJg/UEDEAABAAFAAKw/aAACIAAgAAiA9QcNQAAEAARAALD+oAECgACAAAgAAgACIABYf9AAAUAAQAAEAOsPGiAACAAIgAAIACAAAmD9AQ0QAAEABEAABAAQAAGw/oAGCIAAAAIgAAIACIAAWH9AAwRAAAABEAABAAFAAKw/aAACIAAgAAiAAIAAIAACAAKAAFh/0AAEQABAAATAFQQABEAAEAAQAAHA+oMGCAACAAIgAAgACIAAIAAgAAJg/QENEAABAARAAAQAEAABEABAAARAAAABEAABAARAAKw/oAECIACAAAiAAAACIAACAAiAAAgAIAACIACAAAiAAIAAIADWHzQAARAAEAAEQABAABAAAQABQAAEAARAABAAEAABQABAAAQAAQABEAAEAARAAATAfwMBEAABAARAAAQAEAABsP6ABgiAAAACIAACAAiAAAgAIAACIACAAAiAAAACIAACAAiAAAgAIAACIACAAAiAAAACIAACAAiAAAgACAACoAFg/REAAQABQAAEAAQAARAAEAABQABAAAQAAQABEAAEAARAABAAEAABQABAAARAAAABEAABAARAAAQAEAAB0ADA+guAAAACIAACAAiAAAgAIAACIACAAAiAAAACIAACAAiAAGgAYP0FQAAAARAAAQABMEcCIAAgAAiAAIAAIAACAAKAAGgAWH8EQABAABAAAQABEAAEAARAANAAsP4CgACAAAgAAgACIAAIAAiAAKABYP0FQAAAARAAAQAEQAAEABAAAdAAwPoLgAAAAiAAAgAIgABoAGD9BUAAAAEQAAEABEAANACsPwIgACAACIAAgAAgABoA1h8BEAAQAARAAEAAEAANAOuPAAgACIAAoAFg/QUAAQABEAAEAARAANAAsP4CgACAAAgAGgDWXwAQABAAAUADwPoLAAIAAiAAGgBYfwEQAEAABEADAOsvAAIACIAAaABYfwRAAEAAEAANAOuPAAgACAACoAFg/REAAQABQAA0AKw/AiAAIAAIgAaA9UcANACsPwIgACAAAoAGgPUXAAQABEAA0ACw/gKABoD1FwAEAARAANAAsP4CgAaA9RcABEAEQADQALD+AoAGYP19dgFAA7D+CAACgAAgAGgA1h8B0ACw/giABoD1RwAEAAQAAdAAsP4IgAaA9UcANACsPwKgAWD9EQANAOuPAGgAWH8EQAPA+gsAAgACIABoAFh/AUADwPoLABoA1l8A0ACw/gKABoCfKABoANYfAUADsP4IABqA9UcAkAFMPwKABmD9EQA0AOuPAKABWH8EAA3A+iMAaADWHwFAA7D+CAAygOlHANAArD8CgAZg/REAZADTjwCgAVh/BAANwPojAMgApl8AnEADsP4IADKA6UcA0ACsPwKADGD6EQBkANOPAKABWH8EABnA9CMAyACmHwFABjD9CAAygOlHAJABTD8CgAxg+hEAZADTjwAgA5h+BAAZwPQjACgB3hUCgAyYfhAAlMDugwCgBHYfBAAlsPsgACiB3QcBQAyMPggAYmD0QQAQA6OPAIAkmHsEAFTB1iMAUC8SroQAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAC4AoAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAEM0FLS9XSekPFDIAAAAASUVORK5CYII=" alt="Persea Desktop tile mark" width="64" height="64">
+        <h2>Persea Desktop</h2>
+        <p class="about-version">Version <span id="about-version"></span></p>
+        <p class="about-min-server">
+          Minimum server version: 1.1.1 for the drive API, 1.2.0 for
+          session events, device pairing and the capability probe.
+        </p>
+        <div class="about-links">
+          <a href="https://github.com/BarbellDwarf/persea-desktop" data-external>GitHub</a>
+          <a href="https://github.com/BarbellDwarf/persea-desktop/releases" data-external>Releases</a>
+          <a href="https://github.com/BarbellDwarf/persea" data-external>Server</a>
+          <a href="https://github.com/BarbellDwarf/persea/blob/main/docs/deployment-guide.md" data-external>Documentation</a>
+        </div>
+        <p class="about-license">Licensed under the Apache License, Version 2.0.</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="instance-dialog">
+    <h3 id="instance-dialog-title">Add server</h3>
+    <p class="dialog-desc" id="instance-dialog-desc">
+      The app checks the server and shows its version and capabilities.
+    </p>
+    <form id="instance-form" class="dialog-form" autocomplete="off">
+      <label for="instance-name">Name
+        <input id="instance-name" name="name" type="text" required autocomplete="off">
+      </label>
+      <label for="instance-url">URL
+        <input id="instance-url" name="url" type="url" required autocomplete="url" placeholder="https://persea.example.com">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="instance-dialog-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" class="btn btn-accent">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>
