@@ -111,6 +111,7 @@ fn with_config<R>(f: impl FnOnce(&mut ShellConfig) -> R) -> Option<R> {
     Some(f(&mut cfg))
 }
 
+#[allow(dead_code)] // consumed by the appearance settings UI wiring
 pub fn appearance() -> String {
     with_config(|c| c.file.appearance.clone()).unwrap_or_else(default_appearance)
 }

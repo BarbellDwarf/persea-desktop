@@ -183,7 +183,7 @@ fn select_store(data_dir: &Path) -> Result<SelectedStore, String> {
             KeyringTier::DbKeyStore,
             KeyringTier::KeyUtils,
         ];
-        select_with(data_dir, &tiers, |tier, dir| build_store(tier, dir))
+        select_with(data_dir, &tiers, build_store)
     }
     #[cfg(target_os = "macos")]
     {
@@ -678,7 +678,7 @@ mod tests {
                     .downcast_ref()
                     .expect("mock credential downcast");
                 mock_cred.set_error(KeyringError::NoStorageAccess(Box::new(
-                    std::io::Error::new(std::io::ErrorKind::Other, "simulated locked keyring"),
+                    std::io::Error::other("simulated locked keyring"),
                 )));
             }
             Ok(store)

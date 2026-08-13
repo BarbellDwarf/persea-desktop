@@ -97,14 +97,7 @@ mod tests {
 
     #[derive(Deserialize)]
     struct AppConfig {
-        windows: Vec<WindowConfig>,
-    }
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct WindowConfig {
-        label: Option<String>,
-        title: String,
+        windows: Vec<serde_json::Value>,
     }
 
     fn load_config() -> TauriConfig {
