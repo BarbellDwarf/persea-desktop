@@ -680,7 +680,7 @@ mod tests {
                 body: "{\"error\":\"boom\"}".to_string(),
             }],
             repeat_last: true,
-            last: None,
+            ..Default::default()
         });
         let http = ShellHttp::new();
         let err = tauri::async_runtime::block_on(async {
@@ -695,7 +695,7 @@ mod tests {
         let server = MockServer::start(MockScript {
             responses: vec![ok_json("{}")],
             repeat_last: true,
-            last: None,
+            ..Default::default()
         });
         let http = ShellHttp::new();
         let err = tauri::async_runtime::block_on(async {
