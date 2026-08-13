@@ -126,10 +126,7 @@ pub fn set_download_dir(dir: Option<PathBuf>) {
 
 /// Current download folder (the configured one, else the OS default).
 pub fn download_dir(app: &AppHandle) -> Option<PathBuf> {
-    manager()
-        .dir
-        .clone()
-        .or_else(|| default_download_dir(app))
+    manager().dir.clone().or_else(|| default_download_dir(app))
 }
 
 /// Recent download records (newest last).
@@ -252,8 +249,8 @@ pub fn sanitize_filename(name: &str) -> Option<String> {
     let upper = cleaned.to_ascii_uppercase();
     let stem = upper.split('.').next().unwrap_or("");
     let reserved = [
-        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
-        "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     ];
     if reserved.contains(&stem) {
         return Some(format!("_{cleaned}"));
@@ -277,7 +274,13 @@ pub fn dedup_path(dir: &Path, name: &str) -> PathBuf {
             return candidate;
         }
     }
-    dir.join(format!("{stem} ({}){ext}", std::time::SystemTime::now().elapsed().map(|d| d.as_nanos()).unwrap_or(0)))
+    dir.join(format!(
+        "{stem} ({}){ext}",
+        std::time::SystemTime::now()
+            .elapsed()
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ))
 }
 
 #[cfg(test)]
@@ -303,9 +306,14 @@ mod tests {
         // The web client's screenshots and drive files download blob
         // URLs with the anchor `download` attribute; the engine's
         // suggested name arrives inside the destination PathBuf.
-        assert_eq!(filename_from_url("blob:https://persea.example.com/uuid"), None);
         assert_eq!(
-            engine_suggested_name(Path::new("/home/user/Downloads/persea-a1b2c3d4-1700000000000.png")),
+            filename_from_url("blob:https://persea.example.com/uuid"),
+            None
+        );
+        assert_eq!(
+            engine_suggested_name(Path::new(
+                "/home/user/Downloads/persea-a1b2c3d4-1700000000000.png"
+            )),
             Some("persea-a1b2c3d4-1700000000000.png".to_string())
         );
         assert_eq!(
@@ -317,15 +325,24 @@ mod tests {
 
     #[test]
     fn sanitization_strips_hostiles() {
-        assert_eq!(sanitize_filename("report.csv"), Some("report.csv".to_string()));
-        assert_eq!(sanitize_filename("a/b\\c:d*e?f\"g<h>i|j"), Some("a_b_c_d_e_f_g_h_i_j".to_string()));
+        assert_eq!(
+            sanitize_filename("report.csv"),
+            Some("report.csv".to_string())
+        );
+        assert_eq!(
+            sanitize_filename("a/b\\c:d*e?f\"g<h>i|j"),
+            Some("a_b_c_d_e_f_g_h_i_j".to_string())
+        );
         assert_eq!(sanitize_filename("..hidden"), Some("hidden".to_string()));
         assert_eq!(sanitize_filename("  "), None);
         assert_eq!(sanitize_filename("."), None);
         assert_eq!(sanitize_filename(""), None);
         assert_eq!(sanitize_filename("CON.txt"), Some("_CON.txt".to_string()));
         assert_eq!(sanitize_filename("LPT9"), Some("_LPT9".to_string()));
-        assert_eq!(sanitize_filename("normal name.txt"), Some("normal name.txt".to_string()));
+        assert_eq!(
+            sanitize_filename("normal name.txt"),
+            Some("normal name.txt".to_string())
+        );
     }
 
     #[test]

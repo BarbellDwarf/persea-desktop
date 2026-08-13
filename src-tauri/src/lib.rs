@@ -1,4 +1,6 @@
 mod bridge;
+mod dialogs;
+mod downloads;
 mod hotkeys;
 mod http;
 mod instances;
@@ -7,6 +9,7 @@ mod navigation;
 mod pairing;
 mod provisioning;
 mod shell_config;
+mod windows;
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
@@ -47,21 +50,32 @@ pub fn run() {
                 .iter()
                 .map(|i| i.url.clone())
                 .collect();
+            let default_url = origins.first().cloned().unwrap_or_default();
             let policy = navigation::NavigationPolicy::new(origins.clone(), Vec::new());
+            let (store_id, data_dir) = windows::instance_webview_data(app.handle(), &default_url);
             let builder =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("Persea Desktop")
                     .inner_size(1280.0, 800.0)
                     .min_inner_size(800.0, 600.0)
                     .center()
-                    .initialization_script(bridge::init_script());
-            let builder = navigation::lock_window_builder(builder, policy);
+                    .initialization_script(bridge::init_script())
+                    .data_directory(data_dir);
+            let builder = match store_id {
+                Some(id) => builder.data_store_identifier(id),
+                None => builder,
+            };
+            let builder = windows::lock_viewport_builder(builder, app.handle().clone());
             builder.build()?;
 
             // Bridge: validate the runtime instance origins against the
             // baked remote-URL allowlist (fail closed), install the
             // page→shell listeners.
             bridge::register(app, origins);
+
+            // Session window/tab manager: needs the main window to exist
+            // (it builds the tabstrip window and session windows).
+            windows::setup(app)?;
 
             // Auto-open the default/last instance now that the window
             // exists (the same call auto_open made early was a silent
@@ -97,6 +111,21 @@ pub fn run() {
             pairing::pairing_open_confirm_page,
             pairing::pairing_list_tokens,
             pairing::pairing_revoke,
+            windows::cmd_tabs_list,
+            windows::cmd_tabs_switch,
+            windows::cmd_tabs_close,
+            windows::cmd_tabs_next,
+            windows::cmd_tabs_prev,
+            windows::cmd_tabs_pop_out,
+            windows::cmd_tabs_pop_in,
+            windows::cmd_tabs_expand,
+            windows::cmd_tabs_restore,
+            windows::cmd_tabs_open,
+            windows::cmd_tabs_overflow,
+            windows::cmd_tabs_default_mode_get,
+            windows::cmd_tabs_default_mode_set,
+            windows::cmd_tabs_context_menu,
+            windows::cmd_monitors_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persea Desktop");
