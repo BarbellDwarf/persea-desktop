@@ -39,7 +39,7 @@
 //!    store requires `keychain`, the secret-service backend requires a
 //!    runtime feature). Exact snippet in `docs/keychain.md`.
 //! 2. `build.rs`: gate the commands behind the ACL manifest:
-//!    ```rust
+//!    ```text
 //!    fn main() {
 //!        let attributes = tauri_build::Attributes::new().app_manifest(
 //!            tauri_build::AppManifest::new().commands(&[
@@ -57,7 +57,7 @@
 //!    `allow-keyring-*` / `deny-keyring-*` permissions and removes the
 //!    commands from the default-allowed set.
 //! 3. `lib.rs`:
-//!    ```rust
+//!    ```text
 //!    mod keyring;
 //!
 //!    .invoke_handler(tauri::generate_handler![
