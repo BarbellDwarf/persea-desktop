@@ -62,11 +62,9 @@ use core_graphics::event::{
     EventField, KeyCode,
 };
 
-#[repr(C)]
-struct __CGEvent;
-
 /// Opaque CoreGraphics event reference (kCFNull-droppable by the tap).
-type CGEventRef = *const __CGEvent;
+/// c_void keeps the extern declarations clippy-FFI-clean.
+type CGEventRef = *const c_void;
 
 /// Opaque tap proxy passed to the callback.
 type CGEventTapProxy = *const c_void;
@@ -129,11 +127,9 @@ impl crate::hooks::KeyboardHook for MacHook {
         if self.started.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        if !unsafe { CGPreflightListenEventAccess() } {
-            if !unsafe { CGRequestListenEventAccess() } {
-                self.started.store(false, Ordering::SeqCst);
-                return Err(crate::hooks::HookError::PermissionDenied);
-            }
+        if !unsafe { CGPreflightListenEventAccess() } && !unsafe { CGRequestListenEventAccess() } {
+            self.started.store(false, Ordering::SeqCst);
+            return Err(crate::hooks::HookError::PermissionDenied);
         }
         let runtime = Arc::clone(&self.runtime);
         let handle = thread::Builder::new()
