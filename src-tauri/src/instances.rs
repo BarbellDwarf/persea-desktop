@@ -11,6 +11,12 @@
 //! cached probe reports via [`capability`]. No probe, no capability: the
 //! shell surfaces only what the server advertised.
 
+//! The accessor surface here (capability, probe, store_key, last_known_version) is the
+//! contract consumed by the pairing, tray, transfers, kiosk and provisioning
+//! features that land after this module. Not-yet-consumed items carry an allow
+//! until their consumers wire in; each consumer removes the allow as it lands.
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};

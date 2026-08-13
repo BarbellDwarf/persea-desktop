@@ -4,6 +4,11 @@
 //! handed to the system browser via tauri-plugin-opener, other schemes are
 //! dropped. Blocked navigations log the host only, never the full URL.
 
+//! The policy methods (classify, allows, is_allowed) are the contract consumed
+//! by the window manager and kiosk features that land after this module; the
+//! not-yet-consumed items carry an allow until their consumers wire in.
+#![allow(dead_code)]
+
 use std::collections::HashSet;
 
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
