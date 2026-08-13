@@ -1,0 +1,14 @@
+{
+  "identifier": "remote",
+  "description": "Remote-origin IPC scope for persea instance pages (D04). Grants ONLY core:event:default (listen, unlisten, emit, emitTo) to the origins listed in remote.urls. This file is the single source of truth for which persea instances the shell trusts: D02 instance provisioning must populate remote.urls at build time with the exact configured instance origins (scheme://host[:port]; a leading *. is allowed for subdomain wildcards, anything else fails closed). Empty by default: with no origins listed, remote pages get zero IPC and the bridge stays disabled. Do NOT add other permission groups here; the D04 capability diff review checks this file against the locked grant list.",
+  "windows": [
+    "main"
+  ],
+  "local": false,
+  "remote": {
+    "urls": []
+  },
+  "permissions": [
+    "core:event:default"
+  ]
+}
