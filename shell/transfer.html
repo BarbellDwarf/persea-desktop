@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transfers</title>
+  <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="transfer.css">
+</head>
+<body>
+  <header class="transfer-header">
+    <h1>Transfers</h1>
+    <button id="clear-finished" type="button" class="btn ghost hidden">Clear finished</button>
+  </header>
+  <p id="summary" class="summary hidden" aria-live="polite"></p>
+  <div id="empty" class="empty hidden">
+    <p class="empty-title">No transfers yet</p>
+    <p class="empty-hint">Drag files onto a session window to send them to the drive.</p>
+  </div>
+  <ul id="transfers" class="transfers" aria-live="polite"></ul>
+  <script src="transfer.js"></script>
+</body>
+</html>
