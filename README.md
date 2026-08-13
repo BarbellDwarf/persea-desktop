@@ -57,6 +57,36 @@ setup on Windows.
 Install the Xcode Command Line Tools (`xcode-select --install`); the
 WKWebView engine ships with macOS.
 
+## Platform notes
+
+Per-OS behavior differs enough to warrant dedicated pages:
+
+- **macOS** (`docs/macos.md`): the app ships ad-hoc signed. First
+  launch shows the Gatekeeper "unidentified developer" warning;
+  right-click → Open (or Privacy & Security → Open Anyway) bypasses
+  it, and **every update re-prompts** until notarization lands. macOS 15
+  is stricter about the bypass paths. Tested on macOS 14/15, arm64 +
+  x86_64.
+- **Linux** (`docs/linux-troubleshooting.md`): WebKitGTK 4.1 quirks.
+  The deb declares the GStreamer codec + VA-API stack explicitly
+  (`gstreamer1.0-libav`, `gstreamer1.0-plugins-bad`,
+  `gstreamer1.0-vaapi`, `mesa-va-drivers`); the rpm declares
+  `webkit2gtk4.1` (RHEL 10 needs EPEL 10 first). NVIDIA blank windows
+  are fixed with `WEBKIT_DISABLE_DMABUF_RENDERER=1` /
+  `WEBKIT_DISABLE_COMPOSITING_MODE=1`.
+- **Wayland** (`docs/wayland.md`): global hotkeys are unavailable
+  (X11-only plugin), the Win/Super key capture is best-effort, the tray
+  needs a tray host (KDE native, GNOME needs the AppIndicator
+  extension), kiosk and tab-strip docking are best-effort. X11 has no
+  such limits.
+- **Windows**: the installer bootstraps the WebView2 Evergreen runtime
+  when it is missing (download bootstrapper, silent). The installer is
+  unsigned, so SmartScreen shows "Windows protected your PC"; click
+  **More info → Run anyway** (an EV code-signing cert is the future
+  fix). Windows reserves some hotkey chords (for example Win+L,
+  Ctrl+Alt+Del): registering one shows a conflict in Settings →
+  Shortcuts and the chord stays inactive; pick a free chord.
+
 ## Development
 
 The `shell/` frontend is plain HTML with no build step. With no
