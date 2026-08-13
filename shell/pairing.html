@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device pairing · Persea Desktop</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body class="settings-page">
+  <header class="settings-header">
+    <h1>Device pairing</h1>
+    <div class="header-actions">
+      <a class="btn btn-ghost" href="settings.html">Settings</a>
+      <a class="btn btn-ghost" href="index.html">Home</a>
+    </div>
+  </header>
+
+  <main class="settings-sections">
+    <section class="settings-section" id="sec-pairing" aria-labelledby="sec-pairing-title">
+      <h2 id="sec-pairing-title">Paired devices</h2>
+      <p class="section-desc" id="pairing-desc"></p>
+      <div id="pairing-disabled" class="hidden">
+        <p class="status-warnings">
+          Device pairing is disabled by this server, so the desktop shell
+          cannot register this device with it.
+        </p>
+      </div>
+      <div id="paired-list" class="instance-list" aria-live="polite"></div>
+      <button id="btn-pair" type="button" class="btn btn-accent">Pair this device</button>
+    </section>
+  </main>
+
+  <dialog id="pairing-dialog" aria-labelledby="pairing-dialog-title">
+    <h3 id="pairing-dialog-title">Pair this device</h3>
+    <p class="dialog-desc">
+      Open the pairing page in the server window, paste this code while
+      signed in, and confirm the device.
+    </p>
+    <div class="pairing-code-row">
+      <span id="pairing-code" class="pairing-code"></span>
+      <button id="btn-copy-code" type="button" class="btn btn-ghost">Copy</button>
+    </div>
+    <p class="pairing-status" id="pairing-status" aria-live="polite"></p>
+    <div class="dialog-actions">
+      <button type="button" id="pairing-cancel" class="btn btn-ghost">Cancel</button>
+      <button type="button" id="btn-open-pairing-page" class="btn btn-accent">Open pairing page</button>
+      <button type="button" id="btn-pair-retry" class="btn btn-accent hidden">Try again</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+  <script src="pairing.js"></script>
+</body>
+</html>
