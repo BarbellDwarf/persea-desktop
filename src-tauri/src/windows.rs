@@ -2364,6 +2364,10 @@ mod tests {
         assert_eq!(clean_title("not a timer — 12:34"), "not a timer — 12:34");
         let mut state = TabState::new(PopMode::Tabs);
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
+        state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &session_url("persea.example.com", "aaa111"),
+        );
         let effects = state.note_title(MAIN_WINDOW_LABEL, "prod — 01:02:03 — ●");
         assert_eq!(state.tabs()[0].title, "prod");
         assert!(effects
