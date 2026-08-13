@@ -1,5 +1,13 @@
 //! Scoped remote-origin IPC bridge for persea pages.
 //!
+//! The public surface here (emit helpers, event constants, availability
+//! flag) is the contract consumed by the shell features that land after
+//! this module: the Win-key hook, drag-drop transfers, tray commands and
+//! the desktop-mode suppression. The compile gate runs with
+//! `-D warnings`, so the not-yet-consumed items carry an allow until
+//! their consumers land; each consumer removes the allow as it wires in.
+#![allow(dead_code)]
+//!
 //! Tauri 2 gates remote-origin IPC by capability only: a capability with
 //! `remote.urls` matching the page origin grants its permissions to that
 //! origin, and nothing else is exposed (tauri-2.11.5 `Webview::on_message`
