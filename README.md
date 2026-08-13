@@ -164,6 +164,10 @@ The tauri-driver based test harness is D16.
 - Icons under `src-tauri/icons/` are generated placeholders
   (`scripts/gen-placeholder-icons.py`); the real artwork is D18.
 
+## Support
+
+Persea Desktop is part of the persea project, funded by its community. If the app saves you time, consider sponsoring the project on [Open Collective](https://opencollective.com/persea): contributions pay for CI infrastructure, cross-platform build and signing certificates, test machines, and development time.
+
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE) and
