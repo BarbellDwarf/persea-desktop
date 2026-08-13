@@ -119,10 +119,11 @@ fn attach(win: &WebviewWindow) {
         }
     }
     let app = win.app_handle().clone();
+    let handler_win = win.clone();
     let win = win.clone();
     win.on_window_event(move |event| {
         if let tauri::WindowEvent::DragDrop(dnd) = event {
-            handle_drag_event(&app, &win, dnd.clone());
+            handle_drag_event(&app, &handler_win, dnd.clone());
         }
     });
 }

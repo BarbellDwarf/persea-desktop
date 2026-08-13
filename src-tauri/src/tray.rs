@@ -39,9 +39,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
-use tauri::menu::{
-    CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
-};
+use tauri::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -305,18 +303,18 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .map_err(|_| menu_error("tray state is locked"))?
         .clone();
     let instances = instances::instances();
-    let mut items: Vec<&dyn IsMenuItem<tauri::Wry>> = Vec::new();
+    let menu = Menu::new(app)?;
     if instances.is_empty() {
         let add = MenuItem::with_id(app, "open-settings", "Add instance…", true, None::<&str>)?;
-        items.push(&add);
+        menu.append_items(&[&add])?;
     } else {
         for instance in &instances {
             let submenu = build_instance_submenu(app, &state, instance)?;
-            items.push(&submenu);
+            menu.append_items(&[&submenu])?;
         }
     }
     if !state.kiosk {
-        items.push(&PredefinedMenuItem::separator(app)?);
+        let separator = PredefinedMenuItem::separator(app)?;
         let about = PredefinedMenuItem::about(
             app,
             Some("About"),
@@ -326,11 +324,10 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 ..Default::default()
             }),
         )?;
-        items.push(&about);
         let quit = PredefinedMenuItem::quit(app, Some("Quit"))?;
-        items.push(&quit);
+        menu.append_items(&[&separator, &about, &quit])?;
     }
-    Menu::with_items(app, &items)
+    Ok(menu)
 }
 
 fn menu_error(message: &str) -> tauri::Error {
@@ -343,7 +340,7 @@ fn build_instance_submenu(
     instance: &instances::Instance,
 ) -> tauri::Result<Submenu<tauri::Wry>> {
     let url = instance.url.trim_end_matches('/').to_string();
-    let mut items: Vec<&dyn IsMenuItem<tauri::Wry>> = Vec::new();
+    let submenu = Submenu::with_id(app, format!("instance:{url}"), &instance.name, true)?;
     let sessions = state.sessions.get(&url).cloned().unwrap_or_default();
     if sessions.is_empty() {
         let empty = MenuItem::with_id(
@@ -353,7 +350,7 @@ fn build_instance_submenu(
             false,
             None::<&str>,
         )?;
-        items.push(&empty);
+        submenu.append_items(&[&empty])?;
     } else {
         for session in sessions {
             let label = format!("{} — {}", session.name, prettify_status(&session.status));
@@ -364,11 +361,11 @@ fn build_instance_submenu(
                 true,
                 None::<&str>,
             )?;
-            items.push(&item);
+            submenu.append_items(&[&item])?;
         }
     }
     if !state.kiosk {
-        items.push(&PredefinedMenuItem::separator(app)?);
+        let separator = PredefinedMenuItem::separator(app)?;
         let open = MenuItem::with_id(
             app,
             format!("open-instance:{url}"),
@@ -376,7 +373,7 @@ fn build_instance_submenu(
             true,
             None::<&str>,
         )?;
-        items.push(&open);
+        submenu.append_items(&[&separator, &open])?;
         let paired = crate::pairing::registered_tokens(app)
             .iter()
             .any(|t| t.instance_url == url);
@@ -388,7 +385,7 @@ fn build_instance_submenu(
                 true,
                 None::<&str>,
             )?;
-            items.push(&re_pair);
+            submenu.append_items(&[&re_pair])?;
         } else if paired {
             let paired = CheckMenuItem::with_id(
                 app,
@@ -398,7 +395,7 @@ fn build_instance_submenu(
                 true,
                 None::<&str>,
             )?;
-            items.push(&paired);
+            submenu.append_items(&[&paired])?;
         } else {
             let pair = MenuItem::with_id(
                 app,
@@ -407,7 +404,7 @@ fn build_instance_submenu(
                 true,
                 None::<&str>,
             )?;
-            items.push(&pair);
+            submenu.append_items(&[&pair])?;
         }
         if instances::capability(&url, "kiosk_allowed") {
             let checked = instance.kiosk_allowed == Some(true);
@@ -419,10 +416,10 @@ fn build_instance_submenu(
                 checked,
                 None::<&str>,
             )?;
-            items.push(&kiosk);
+            submenu.append_items(&[&kiosk])?;
         }
     }
-    Submenu::with_id_and_items(app, format!("instance:{url}"), &instance.name, true, &items)
+    Ok(submenu)
 }
 
 /// Tray label for a session status.
