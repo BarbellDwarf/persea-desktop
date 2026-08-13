@@ -56,8 +56,15 @@
 
     <section class="settings-section" id="sec-notifications" aria-labelledby="sec-notifications-title">
       <h2 id="sec-notifications-title">Notifications</h2>
-      <p class="section-desc">Tray icon and session alerts while the app runs in the background.</p>
-      <div class="placeholder-block">Tray notifications arrive in a later release (D08).</div>
+      <p class="section-desc">Session alerts while the app runs in the background.</p>
+      <label class="toggle-row">
+        <span class="toggle-label">Session notifications</span>
+        <div class="toggle-switch">
+          <input type="checkbox" id="notifications-enabled">
+          <span class="toggle-slider"></span>
+        </div>
+      </label>
+      <p class="section-desc" id="notifications-note">Quiet by default: session ended, errors, transfer complete and update available. First enable sends a test notification.</p>
     </section>
 
     <section class="settings-section" id="sec-kiosk" aria-labelledby="sec-kiosk-title">

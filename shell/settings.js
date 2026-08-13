@@ -451,9 +451,28 @@ async function initHeader() {
   });
 }
 
+async function initNotifications() {
+  const toggle = document.getElementById("notifications-enabled");
+  if (!toggle) return;
+  try {
+    toggle.checked = await invoke("notifications_get_enabled");
+  } catch {
+    return;
+  }
+  toggle.addEventListener("change", async () => {
+    try {
+      await invoke("notifications_set_enabled", { enabled: toggle.checked });
+    } catch (err) {
+      toggle.checked = !toggle.checked;
+      alert("Failed to update notifications: " + err);
+    }
+  });
+}
+
 reloadInstances();
 initAppearance();
 initClipboard();
 initShortcuts();
 initAbout();
 initHeader();
+initNotifications();
