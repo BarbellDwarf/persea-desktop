@@ -30,16 +30,13 @@ pub fn run() {
                 .map(|i| i.url.clone())
                 .collect();
             let policy = navigation::NavigationPolicy::new(origins.clone(), Vec::new());
-            let builder = WebviewWindowBuilder::new(
-                app,
-                "main",
-                WebviewUrl::App("index.html".into()),
-            )
-            .title("Persea Desktop")
-            .inner_size(1280.0, 800.0)
-            .min_inner_size(800.0, 600.0)
-            .center()
-            .initialization_script(bridge::init_script());
+            let builder =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .title("Persea Desktop")
+                    .inner_size(1280.0, 800.0)
+                    .min_inner_size(800.0, 600.0)
+                    .center()
+                    .initialization_script(bridge::init_script());
             let builder = navigation::lock_window_builder(builder, policy);
             builder.build()?;
 
