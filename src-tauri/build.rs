@@ -30,6 +30,8 @@ fn main() {
             "cmd_transfer_open_folder",
             "cmd_transfer_clear_finished",
             "cmd_transfer_download",
+            "notifications_get_enabled",
+            "notifications_set_enabled",
         ]));
     tauri_build::try_build(attributes).expect("tauri-build with app manifest failed");
 }
