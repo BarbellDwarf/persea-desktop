@@ -569,7 +569,7 @@ async fn run_instance(app: AppHandle, url: String) {
         if fingerprint != state.token_fingerprint {
             // Re-pair (or a different identity): reset and reseed so
             // sessions that changed while we were paused never notify.
-            state.token_fingerprint = fingerprint;
+            state.token_fingerprint = fingerprint.clone();
             state.engine = DiffEngine::new();
             state.cursor = None;
             state.idle_limit = None;

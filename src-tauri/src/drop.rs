@@ -36,10 +36,13 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{LazyLock, Mutex, OnceLock};
 use std::time::Duration;
 
-use tauri::{AppHandle, DragDropEvent, Manager, PhysicalPosition, WebviewUrl, WebviewWindow};
+use tauri::{
+    AppHandle, DragDropEvent, Manager, PhysicalPosition, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
 use url::Url;
 
 use crate::transfer;
@@ -54,7 +57,8 @@ const POLL_INTERVAL_MS: u64 = 1000;
 static APP: OnceLock<AppHandle> = OnceLock::new();
 /// Labels that already carry the drag handler; pruned when the window
 /// disappears so a reopened window with the same label re-attaches.
-static ATTACHED: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+static ATTACHED: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 /// The session window a drag last entered (used when the drop lands on
 /// the overlay itself, a Wayland fallback).
 static LAST_TARGET: Mutex<Option<String>> = Mutex::new(None);
