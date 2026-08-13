@@ -10,6 +10,5 @@ fn main() {
             "keyring_delete",
             "keyring_tier",
         ]));
-    tauri_build::try_build(attributes)
-        .expect("tauri-build with app manifest failed");
+    tauri_build::try_build(attributes).expect("tauri-build with app manifest failed");
 }
