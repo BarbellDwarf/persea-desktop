@@ -1,0 +1,177 @@
+name: Beta Desktop
+
+# Rolling beta, mirroring the server repo's beta.yml: manual dispatch
+# with the branch picker builds the FULL artifact matrix (same legs as
+# Release) and publishes it to the `beta` pre-release. Each run deletes
+# the previous beta release and tag, recreates them at the dispatched
+# branch head as a draft, uploads fresh assets, then un-drafts. Checks
+# (ci.yml gates + CodeQL) gate the build: a failing check aborts before
+# anything is published. Dispatch-only for parity with the server beta;
+# no `beta` branch trigger.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta-release
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Gates (check / fmt / clippy / test / audit)
+    uses: ./.github/workflows/ci.yml
+
+  codeql:
+    name: Gates (CodeQL)
+    uses: ./.github/workflows/codeql.yml
+
+  prepare:
+    name: Recreate beta pre-release
+    needs: [checks, codeql]
+    runs-on: ubuntu-24.04
+    outputs:
+      release_id: ${{ steps.beta.outputs.release_id }}
+      beta_version: ${{ steps.beta.outputs.beta_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the beta pre-release
+        id: beta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release delete beta --yes --cleanup-tag >/dev/null 2>&1 || true
+          RELEASE_ID=$(gh release create beta --target "$GITHUB_SHA" --draft --prerelease \
+            --title "Persea Desktop beta" \
+            --notes "Rolling beta build of $GITHUB_REF_NAME ($GITHUB_SHA). See docs/beta.md." \
+            --json id --jq .id)
+          VERSION=$(jq -r .version src-tauri/tauri.conf.json)
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "beta_version=${VERSION}-beta.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: [checks, codeql, prepare]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            args: --bundles msi,nsis
+            rust_targets: ""
+            binary: src-tauri/target/release/persea-desktop.exe
+            smoke: |
+              $bin = "src-tauri\target\release\persea-desktop.exe"
+              if (!(Test-Path $bin)) { Write-Error "smoke: no binary at $bin"; exit 1 }
+              $p = Start-Process -FilePath $bin -PassThru
+              Start-Sleep -Seconds 15
+              $p.Refresh()
+              if ($p.HasExited) { Write-Error "smoke: app exited early (code $($p.ExitCode))"; exit 1 }
+              Write-Host "smoke: app alive after 15s"
+              Stop-Process -Id $p.Id -Force
+          - name: linux
+            os: ubuntu-22.04
+            args: --bundles deb,rpm,appimage
+            rust_targets: ""
+            binary: src-tauri/target/release/persea-desktop
+            smoke: |
+              set -euo pipefail
+              BIN="src-tauri/target/release/persea-desktop"
+              [ -x "$BIN" ] || { echo "smoke: no binary at $BIN" >&2; exit 1; }
+              xvfb-run -a "$BIN" &
+              PID=$!
+              sleep 15
+              if ! kill -0 "$PID" 2>/dev/null; then echo "smoke: app exited early" >&2; exit 1; fi
+              echo "smoke: app alive after 15s"
+              kill "$PID" 2>/dev/null || true
+              wait "$PID" 2>/dev/null || true
+          - name: macos-arm64
+            os: macos-latest
+            args: --target aarch64-apple-darwin --bundles dmg
+            rust_targets: aarch64-apple-darwin
+            binary: src-tauri/target/aarch64-apple-darwin/release/persea-desktop
+            smoke: |
+              set -euo pipefail
+              BIN="src-tauri/target/aarch64-apple-darwin/release/persea-desktop"
+              [ -x "$BIN" ] || { echo "smoke: no binary at $BIN" >&2; exit 1; }
+              "$BIN" &
+              PID=$!
+              sleep 15
+              if ! kill -0 "$PID" 2>/dev/null; then echo "smoke: app exited early" >&2; exit 1; fi
+              echo "smoke: app alive after 15s"
+              kill "$PID" 2>/dev/null || true
+              wait "$PID" 2>/dev/null || true
+          - name: macos-x86_64
+            os: macos-latest
+            args: --target x86_64-apple-darwin --bundles dmg
+            rust_targets: x86_64-apple-darwin
+            binary: src-tauri/target/x86_64-apple-darwin/release/persea-desktop
+            smoke: |
+              set -euo pipefail
+              BIN="src-tauri/target/x86_64-apple-darwin/release/persea-desktop"
+              [ -x "$BIN" ] || { echo "smoke: no binary at $BIN" >&2; exit 1; }
+              "$BIN" &
+              PID=$!
+              sleep 15
+              if ! kill -0 "$PID" 2>/dev/null; then echo "smoke: app exited early" >&2; exit 1; fi
+              echo "smoke: app alive after 15s"
+              kill "$PID" 2>/dev/null || true
+              wait "$PID" 2>/dev/null || true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev libdbus-1-dev \
+            patchelf xdg-utils libfuse2 xvfb
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+          rustflags: ""
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: beta-${{ matrix.name }}
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.prepare.outputs.release_id }}
+          tagName: beta
+          releaseDraft: true
+          prerelease: true
+          uploadUpdaterJson: true
+          # Beta builds carry X.Y.Z-beta.<run> and point the updater at
+          # the beta release's latest.json. The stable endpoints live in
+          # tauri.conf.json (D13); this override is inert until the
+          # updater plugin lands, then beta installers update from the
+          # beta channel and stable installers never see beta.
+          args: >-
+            ${{ matrix.args }}
+            --config '{"version":"${{ needs.prepare.outputs.beta_version }}","plugins":{"updater":{"endpoints":["https://github.com/persea-grove/persea-desktop/releases/download/beta/latest.json"]}}}'
+
+      - name: Smoke (app launches, window opens)
+        run: ${{ matrix.smoke }}
+
+  finalize:
+    name: Publish beta pre-release
+    needs: [build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Un-draft the beta pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit beta --draft=false
