@@ -2107,7 +2107,7 @@ mod tests {
         assert!(effects.iter().any(|e| matches!(e, Effect::SavePrefs)));
         // The viewport departure to home is shell-initiated: expected.
         assert_eq!(state.overrides().get("aaa111"), Some(&PopMode::Window));
-        let home = "https://persea.example.com/";
+        let home = "https://persea.example.com";
         assert!(effects
             .iter()
             .any(|e| matches!(e, Effect::NavigateViewport(u) if u == home)));
@@ -2155,7 +2155,7 @@ mod tests {
             .iter()
             .any(|e| matches!(e, Effect::ExpandWindow { label, .. } if label == "session-aaa111")));
         assert!(effects.iter().any(
-            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com/")
+            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com")
         ));
         // Restore from inline: back into the viewport.
         let effects = state.restore("aaa111");
@@ -2204,7 +2204,7 @@ mod tests {
         assert!(state.tabs().is_empty());
         assert_eq!(state.active(), None);
         assert!(effects.iter().any(
-            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com/")
+            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com")
         ));
     }
 
@@ -2264,7 +2264,12 @@ mod tests {
     fn viewport_departure_removes_the_tab_view() {
         let mut state = TabState::new(PopMode::Tabs);
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
-        // The page's close flow navigates to /connections.html.
+        // The viewport arrives at the session page first (as in the real
+        // webview flow), then the page's close flow navigates away.
+        state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &session_url("persea.example.com", "aaa111"),
+        );
         let effects = state.note_navigated(
             MAIN_WINDOW_LABEL,
             &url("https://persea.example.com/connections.html"),

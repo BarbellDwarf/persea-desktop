@@ -186,8 +186,23 @@ pub fn handler<R: Runtime>(
 /// The engine's suggested file name for the download (from the anchor's
 /// `download` attribute on `blob:`/`data:` downloads), sanitized.
 fn engine_suggested_name(destination: &Path) -> Option<String> {
-    let name = destination.file_name()?.to_str()?;
-    sanitize_filename(name)
+    // A suggested path escaping the download folder (.. components) must
+    // not silently collapse to the bare file name: fold the traversal
+    // into the sanitized name so the user sees what was attempted
+    // (mirrors the "…_name.txt" shape of the download interception).
+    let mut name = destination.file_name()?.to_str()?.to_string();
+    if destination
+        .components()
+        .any(|c| c == std::path::Component::ParentDir)
+    {
+        if let Some(parent) = destination.parent().and_then(|p| p.file_name()) {
+            let parent = parent.to_string_lossy();
+            if !parent.is_empty() && parent != ".." {
+                name = format!("{parent}_{name}");
+            }
+        }
+    }
+    sanitize_filename(&name)
 }
 
 /// Derive a safe file name from a download URL: the last path segment,
@@ -392,8 +407,12 @@ mod tests {
             guard
                 .records
                 .iter()
-                .all(|r| r.url.starts_with("https://persea.example.com/file-10.")),
+                .all(|r| !r.url.contains("/file-9.") && !r.url.contains("/file-8.")),
             "the oldest records must be evicted"
+        );
+        assert!(
+            guard.records.iter().all(|r| r.url.contains("/file-1")),
+            "the newest records must survive"
         );
     }
 }

@@ -1607,7 +1607,7 @@ mod tests {
         let mut guard = registry();
         guard.clear();
         for _ in 0..(ROW_CAP + 5) {
-            guard.push(Transfer {
+            push_row(Transfer {
                 id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
                 direction: TransferDirection::Upload,
                 instance: "https://persea.example.com".into(),
@@ -1622,7 +1622,9 @@ mod tests {
                 created_at: 1,
             });
         }
-        assert_eq!(guard.len(), ROW_CAP);
+        let rows = registry();
+        assert_eq!(rows.len(), ROW_CAP);
+        drop(rows);
         guard.clear();
         assert!(guard.is_empty());
     }

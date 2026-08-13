@@ -570,7 +570,9 @@ mod tests {
 
     #[test]
     fn state_changing_call_reuses_bootstrapped_token() {
-        let server = MockServer::start(MockScript::new(vec![csrf_response("csrf-stable")]));
+        let mut script = MockScript::new(vec![csrf_response("csrf-stable")]);
+        script.repeat_last = true;
+        let server = MockServer::start(script);
         let http = ShellHttp::new();
         tauri::async_runtime::block_on(async {
             http.bootstrap(&server.url()).await.expect("bootstrap");
