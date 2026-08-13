@@ -1604,8 +1604,10 @@ mod tests {
 
     #[test]
     fn registry_caps_and_clears_finished() {
-        let mut guard = registry();
-        guard.clear();
+        {
+            let mut guard = registry();
+            guard.clear();
+        }
         for _ in 0..(ROW_CAP + 5) {
             push_row(Transfer {
                 id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
@@ -1622,10 +1624,8 @@ mod tests {
                 created_at: 1,
             });
         }
-        let rows = registry();
-        assert_eq!(rows.len(), ROW_CAP);
-        drop(rows);
-        guard.clear();
-        assert!(guard.is_empty());
+        assert_eq!(registry().len(), ROW_CAP);
+        registry().clear();
+        assert!(registry().is_empty());
     }
 }
