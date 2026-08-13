@@ -157,8 +157,8 @@ pub fn apply_event(state: PairingState, event: PairingEvent) -> (PairingState, b
             },
             true,
         ),
-        (Approved { .. } | Expired | Used | TimedOut | Cancelled | Failed { .. }, _) => {
-            (state.clone(), true)
+        (s @ (Approved { .. } | Expired | Used | TimedOut | Cancelled | Failed { .. }), _) => {
+            (s, true)
         }
         (other, _) => (other, false),
     }
