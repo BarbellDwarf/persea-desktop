@@ -38,10 +38,11 @@
 //! navigations, `window.open` requests, `window.close` attempts (via
 //! page-initiated navigation away), the bridge `session-ready` /
 //! `session-ended` events, document titles, and window lifecycle events.
-//! It does NOT have an authenticated REST session (device pairing lands
-//! later), so the protocol badge and hostname metadata fields stay
+//! It does NOT yet consume the paired API token (the pairing flow
+//! stores tokens; a token accessor + sessions-API enrichment is a
+//! follow-up), so the protocol badge and hostname metadata fields stay
 //! `None` and the strip shows a generic badge; the data model carries
-//! the fields so the sessions API can populate them once a paired token
+//! the fields so the sessions API can populate them once the accessor
 //! exists. The document title ("entry — HH:MM:SS — ●") provides the
 //! display label; the ticking duration is stripped.
 //!
@@ -57,7 +58,8 @@
 //! ## Terminate semantics (honest v1.2.0)
 //!
 //! Terminating a session server-side needs an authenticated
-//! `DELETE /api/sessions/<id>`, which requires the paired API token.
+//! `DELETE /api/sessions/<id>`, which requires the paired API token
+//! (the pairing flow stores one; the accessor is a follow-up).
 //! Until then the tab menu's Terminate closes the tab view (the page's
 //! own toolbar still terminates for real), and closing a tab never ends
 //! the server-side session — exactly like closing a browser tab. The
@@ -1309,6 +1311,15 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(id) = payload_session_id(event.payload()) {
             let _ = ended_tx.send(Msg::SessionEnded { id });
         }
+    });
+
+    // Global shortcut events: the hotkeys module emits a cycle-sessions
+    // event (Ctrl+Shift+Tab chord, user-configurable) that the tab
+    // manager consumes; the strip page handles Ctrl+Tab / Ctrl+Shift+Tab
+    // locally while it has focus.
+    let cycle_tx = tx.clone();
+    app.listen_any(crate::hotkeys::EVENT_CYCLE_SESSIONS, move |_event| {
+        let _ = cycle_tx.send(Msg::Next);
     });
 
     // The main window drives the strip's dock position.

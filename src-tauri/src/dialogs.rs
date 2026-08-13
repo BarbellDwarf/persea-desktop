@@ -44,15 +44,16 @@
 //! ## Recommended native-dialog follow-up (dispatcher + server)
 //!
 //! The clean synchronous path is an event round-trip through the
-//! existing desktop bridge: the server's page (S07 partial) forwards
-//! its `confirm()` call sites to the shell via a page-to-shell event;
-//! the shell shows `blocking_ask` (tauri-plugin-dialog) and replies
-//! with a shell-to-page event carrying the boolean. That keeps
-//! `confirm()` synchronous at the call site and uses a real native
-//! dialog. It needs: (a) the server to emit a confirm request event for
-//! its confirm call sites, (b) the dispatcher to pre-wire the dialog
-//! plugin. This module's [`confirm_override_script`] is the shell side
-//! of that round trip, shipped ready to activate.
+//! existing desktop bridge: the server's page (the desktop-bridge
+//! partial) forwards its `confirm()` call sites to the shell via a
+//! page-to-shell event; the shell shows `blocking_ask`
+//! (tauri-plugin-dialog) and replies with a shell-to-page event
+//! carrying the boolean. That keeps `confirm()` synchronous at the call
+//! site and uses a real native dialog. It needs: (a) the server to emit
+//! a confirm request event for its confirm call sites, (b) the
+//! dispatcher to pre-wire the dialog plugin. This module's
+//! [`confirm_override_script`] is the shell side of that round trip,
+//! shipped ready to activate.
 //!
 //! ## File inputs
 //!
@@ -87,15 +88,15 @@
 
 /// Document-start script for the native confirm round trip.
 ///
-/// Contract with the server page (S07 partial, server side): the page
-/// emits `confirm-request` with `{ "message": string }` and listens for
-/// `confirm-response` with `{ "ok": boolean }`. This script answers
-/// with a native dialog through the plugin's `ask` when the plugin JS is
-/// present, and never throws. Without the plugin the listener is never
-/// installed and the script is inert — which is why it is NOT part of
-/// the bridge init script: it only becomes active once the dispatcher
-/// pre-wires `tauri-plugin-dialog` AND the server side emits the
-/// request event.
+/// Contract with the server page (the desktop-bridge partial, server
+/// side): the page emits `confirm-request` with `{ "message": string }`
+/// and listens for `confirm-response` with `{ "ok": boolean }`. This
+/// script answers with a native dialog through the plugin's `ask` when
+/// the plugin JS is present, and never throws. Without the plugin the
+/// listener is never installed and the script is inert — which is why
+/// it is NOT part of the bridge init script: it only becomes active
+/// once the dispatcher pre-wires `tauri-plugin-dialog` AND the server
+/// side emits the request event.
 ///
 /// Note on `window.confirm`: it is synchronous, the plugin's `ask` is
 /// async, and wry exposes no engine script-dialog delegate, so a
