@@ -541,7 +541,7 @@ mod tests {
         dir
     }
 
-    fn ok_factory(tier: KeyringTier, _dir: &Path) -> Result<Arc<CredentialStore>, String> {
+    fn ok_factory(_tier: KeyringTier, _dir: &Path) -> Result<Arc<CredentialStore>, String> {
         Ok(mock_store())
     }
 

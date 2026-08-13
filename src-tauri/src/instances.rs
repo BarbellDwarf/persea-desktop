@@ -706,6 +706,36 @@ pub async fn cmd_instances_update(
     new_url: Option<String>,
 ) -> Result<InstanceView, String> {
     let handle = store_handle().ok_or_else(unavailable_store)?;
+    // Validate everything under a short lock (no awaits while held).
+    let validated: Option<String> = {
+        let store = handle
+            .lock()
+            .map_err(|_| "instance store is locked".to_string())?;
+        if store.index_of(&url).is_none() {
+            return Err(format!("No instance with URL {url}"));
+        }
+        if let Some(n) = name.as_deref() {
+            if n.trim().is_empty() {
+                return Err("Name is required".to_string());
+            }
+        }
+        match &new_url {
+            Some(nu) => {
+                let nu = validate_instance_url(nu)?;
+                if nu != url && store.index_of(&nu).is_some() {
+                    return Err(format!("An instance with URL {nu} already exists"));
+                }
+                Some(nu)
+            }
+            None => None,
+        }
+    };
+    // Probe outside the lock: the HTTP await must not hold the guard.
+    let outcome = match &validated {
+        Some(nu) => Some(probe_server(nu).await),
+        None => None,
+    };
+    // Apply under a fresh lock.
     let mut store = handle
         .lock()
         .map_err(|_| "instance store is locked".to_string())?;
@@ -713,24 +743,14 @@ pub async fn cmd_instances_update(
         .index_of(&url)
         .ok_or_else(|| format!("No instance with URL {url}"))?;
     if let Some(n) = name {
-        let n = n.trim().to_string();
-        if n.is_empty() {
-            return Err("Name is required".to_string());
-        }
-        store.file.instances[idx].name = n;
+        store.file.instances[idx].name = n.trim().to_string();
     }
-    if let Some(nu) = new_url {
-        let nu = validate_instance_url(&nu)?;
-        if nu != url && store.index_of(&nu).is_some() {
-            return Err(format!("An instance with URL {nu} already exists"));
-        }
+    if let (Some(nu), Some(o)) = (&validated, outcome) {
         store.file.instances[idx].url = nu.clone();
-        store.file.instances[idx].probe = None;
+        store.file.instances[idx].probe = Some(o);
         if store.file.last_used.as_deref() == Some(url.as_str()) {
             store.file.last_used = Some(nu.clone());
         }
-        let outcome = probe_server(&nu).await;
-        store.file.instances[idx].probe = Some(outcome);
     }
     store.save().map_err(|e| e.to_string())?;
     Ok(instance_view(&store.file.instances[idx]))
