@@ -328,7 +328,7 @@ fn auto_open(app: &tauri::App, store: &Mutex<InstanceStore>) {
     let Ok(parsed) = url::Url::parse(&url) else {
         return;
     };
-    let _ = win.navigate(tauri::WebviewUrl::External(parsed));
+    let _ = win.navigate(parsed);
 }
 
 /// Background probe of every configured instance at startup: caches
@@ -815,8 +815,7 @@ pub fn cmd_instances_open_setup(app: tauri::AppHandle, url: String) -> Result<()
     let win = app
         .get_webview_window(window_label(&url))
         .ok_or_else(main_window_missing)?;
-    win.navigate(tauri::WebviewUrl::External(parsed))
-        .map_err(|e| e.to_string())
+    win.navigate(parsed).map_err(|e| e.to_string())
 }
 
 fn navigate_main(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
@@ -824,8 +823,7 @@ fn navigate_main(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
     let win = app
         .get_webview_window(window_label(url))
         .ok_or_else(main_window_missing)?;
-    win.navigate(tauri::WebviewUrl::External(parsed))
-        .map_err(|e| e.to_string())
+    win.navigate(parsed).map_err(|e| e.to_string())
 }
 
 fn is_false(b: &bool) -> bool {

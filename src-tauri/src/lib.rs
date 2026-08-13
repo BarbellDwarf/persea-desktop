@@ -4,7 +4,7 @@ mod keyring;
 mod navigation;
 mod shell_config;
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{WebviewUrl, WebviewWindowBuilder};
 
 pub fn run() {
     tauri::Builder::default()

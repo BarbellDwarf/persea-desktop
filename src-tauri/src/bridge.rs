@@ -18,7 +18,7 @@ use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
-use tauri::{App, AppHandle, Emitter, EventTarget, Listener, Manager};
+use tauri::{App, AppHandle, Emitter, EventTarget, Listener};
 use url::Url;
 
 /// The baked remote capability file. `include_str!` keeps validation in sync
