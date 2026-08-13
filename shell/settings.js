@@ -1,5 +1,6 @@
-/* Persea Desktop settings page (D02): instances CRUD + probe display,
- * appearance (shell theme), placeholders for later tickets, About.
+/* Persea Desktop settings page: instances CRUD + probe display,
+ * appearance (shell theme), global shortcuts, placeholders for later
+ * features, About.
  * Runs after app.js (invoke, initTheme, capabilityChips, copyText).
  */
 
@@ -297,6 +298,143 @@ function initClipboard() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Shortcuts                                                          */
+/* ------------------------------------------------------------------ */
+
+const SHORTCUT_STATUS_LABELS = {
+  registered: "Active",
+  conflict: "Conflict",
+  unavailable: "Unavailable",
+  disabled: "Disabled",
+};
+
+function shortcutStatusClass(status) {
+  switch (status) {
+    case "registered":
+      return "ok";
+    case "conflict":
+      return "warn";
+    case "unavailable":
+    case "disabled":
+      return "offline";
+    default:
+      return "";
+  }
+}
+
+function renderShortcutRow(entry, editable) {
+  const row = document.createElement("div");
+  row.className = "shortcut-row";
+
+  const main = document.createElement("div");
+  main.className = "shortcut-main";
+
+  const title = document.createElement("div");
+  title.className = "shortcut-title";
+  title.textContent = entry.label;
+  main.appendChild(title);
+
+  const desc = document.createElement("div");
+  desc.className = "shortcut-desc";
+  desc.textContent = entry.description;
+  main.appendChild(desc);
+
+  const inputRow = document.createElement("div");
+  inputRow.className = "shortcut-input-row";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = entry.shortcut;
+  input.className = "shortcut-input";
+  input.spellcheck = false;
+  input.disabled = !editable;
+  input.setAttribute("aria-label", "Shortcut chord for " + entry.label);
+  inputRow.appendChild(input);
+
+  const status = document.createElement("span");
+  status.className = "shortcut-status " + shortcutStatusClass(entry.status);
+  status.textContent = SHORTCUT_STATUS_LABELS[entry.status] || entry.status;
+  inputRow.appendChild(status);
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "btn btn-ghost";
+  saveBtn.textContent = "Save";
+  saveBtn.disabled = !editable;
+  const save = async () => {
+    saveBtn.disabled = true;
+    try {
+      const view = await invoke("hotkeys_set_shortcut", {
+        id: entry.id,
+        shortcut: input.value.trim(),
+      });
+      renderShortcutsView(view);
+    } catch (err) {
+      alert("Could not change shortcut: " + err);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  };
+  saveBtn.addEventListener("click", save);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      save();
+    }
+  });
+  inputRow.appendChild(saveBtn);
+
+  main.appendChild(inputRow);
+  row.appendChild(main);
+  return row;
+}
+
+function renderShortcutsView(view) {
+  const noteEl = document.getElementById("shortcuts-note");
+  const listEl = document.getElementById("shortcuts-list");
+  if (!noteEl || !listEl) return;
+
+  const notes = [];
+  if (!view.platformSupported) {
+    notes.push(
+      "Global shortcuts are unavailable on Wayland; the app stays fully " +
+        "functional. Set window and session keybindings in your compositor instead."
+    );
+  }
+  if (view.enabled === false) {
+    notes.push("Shortcuts are disabled while kiosk mode is active.");
+  }
+  if (view.shortcuts.some((s) => s.status === "conflict")) {
+    notes.push(
+      "A chord could not be registered: the OS or another program already " +
+        "uses it. Pick a different chord; no fallback is applied."
+    );
+  }
+  noteEl.textContent = notes.join(" ");
+  noteEl.classList.toggle("hidden", notes.length === 0);
+
+  listEl.textContent = "";
+  const editable = view.platformSupported && view.enabled !== false;
+  view.shortcuts.forEach((entry) => listEl.appendChild(renderShortcutRow(entry, editable)));
+}
+
+async function initShortcuts() {
+  const listEl = document.getElementById("shortcuts-list");
+  if (!listEl) return;
+  let view = null;
+  try {
+    view = await invoke("hotkeys_get_settings");
+  } catch {
+    view = null;
+  }
+  if (!view) {
+    listEl.textContent = "Shortcut status is unavailable right now.";
+    return;
+  }
+  renderShortcutsView(view);
+}
+
+/* ------------------------------------------------------------------ */
 /* About + header                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -316,5 +454,6 @@ async function initHeader() {
 reloadInstances();
 initAppearance();
 initClipboard();
+initShortcuts();
 initAbout();
 initHeader();

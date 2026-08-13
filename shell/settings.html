@@ -44,8 +44,14 @@
 
     <section class="settings-section" id="sec-shortcuts" aria-labelledby="sec-shortcuts-title">
       <h2 id="sec-shortcuts-title">Shortcuts</h2>
-      <p class="section-desc">Keyboard shortcut customization.</p>
-      <div class="placeholder-block">Shortcut management arrives in a later release (D09).</div>
+      <p class="section-desc">
+        Global chords that fire while the app runs in the background. Write
+        them as modifiers plus a key, e.g. <code>ctrl+alt+p</code>. A chord
+        that the OS or another program already owns shows as a conflict and
+        stays inactive until you pick a different one.
+      </p>
+      <div id="shortcuts-note" class="shortcuts-note hidden" role="status" aria-live="polite"></div>
+      <div id="shortcuts-list" class="shortcuts-list" aria-live="polite"></div>
     </section>
 
     <section class="settings-section" id="sec-notifications" aria-labelledby="sec-notifications-title">
