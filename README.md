@@ -5,10 +5,10 @@ whose webview logs into a persea instance and hosts the remote desktop
 sessions. No server or guacd is embedded, you point the app at your own
 persea instance (BYO server).
 
-Current state: D01 scaffold. The window opens and shows a placeholder
-shell page; instance management, navigation control, pairing, tray and
-the other desktop features land in later tickets (tracked in the parent
-repository under `wayfinder/v1.2.0/`).
+Current state: D01 scaffold with the D03 navigation lockdown in place.
+The window opens and shows a placeholder shell page; instance
+management, pairing, tray and the other desktop features land in later
+tickets (tracked in the parent repository under `wayfinder/v1.2.0/`).
 
 ## Repo layout
 
@@ -74,6 +74,42 @@ persea server with the dev script (stub until D02):
 ```sh
 PERSEA_URL=http://127.0.0.1:8089 ./scripts/dev.sh
 ```
+
+## Navigation allowlist
+
+The webview is locked down to the configured instance and the identity
+providers its login redirects to. Any navigation off those origins is
+blocked: http(s) links are handed to your system browser instead,
+everything else is dropped. Blocked navigations are logged with the host
+only, never the full URL, so log lines stay clean of query strings and
+tokens.
+
+The allowlist has two config inputs (both fed by the instance and shell
+config, see D02):
+
+- **Instance origins**: the scheme, host and port of each persea
+  instance the app connects to. A bare host is treated as `https://`.
+- **`auth.extra_allowed_hosts`**: bare hostnames of OIDC/SAML identity
+  providers, used for the login redirect chain. Defaults to empty.
+
+An instance entry that does not parse as an http(s) URL is skipped with
+a startup warning.
+
+If an OIDC login stalls, look for a log line like
+
+```
+[persea-desktop] navigation lockdown: blocked host login.corp.example.com
+```
+
+and add that host to `auth.extra_allowed_hosts`. Any scheme and port on
+the host is allowed, so list the bare hostname only. Matching is exact:
+`idp.example.com` does not cover `login.idp.example.com`. The bundled
+shell's own origin (`tauri://localhost`) is always allowed, and http(s)
+localhost targets are allowed in dev builds.
+
+`window.open` from a remote page is only honored for URLs inside an
+instance origin (multi-window support is D05); everything else is
+rejected, with http(s) URLs handed to the system browser.
 
 ## Testing
 
