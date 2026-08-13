@@ -139,6 +139,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 /// and exit: in kiosk mode the menu drops About, Quit, instance
 /// switching, pair items and the kiosk toggle itself, leaving only the
 /// session switcher.
+#[allow(dead_code)] // kiosk feature (D12) calls this on entry/exit; placeholder until wired
 pub fn set_kiosk(app: &AppHandle, kiosk: bool) {
     let Some(state) = state_handle() else { return };
     let mut state = state.lock().unwrap();

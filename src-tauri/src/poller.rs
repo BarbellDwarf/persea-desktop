@@ -152,6 +152,7 @@ impl DiffEngine {
     }
 
     /// The recorded view for a session, if any.
+    #[cfg(test)]
     pub fn view(&self, session_id: &str) -> Option<&SessionView> {
         self.views.get(session_id)
     }

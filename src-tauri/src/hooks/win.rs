@@ -119,7 +119,7 @@ fn run_pump(stop: Arc<AtomicBool>) {
                 break;
             }
             unsafe {
-                TranslateMessage(&msg);
+                let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
         } else {

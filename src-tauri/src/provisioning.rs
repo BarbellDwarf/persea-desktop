@@ -111,16 +111,10 @@ pub struct ProvisionedInstance {
 /// Kiosk override. `enabled: Option<bool>`: `Some(true)` pins kiosk on,
 /// `Some(false)` pins it off, `None` (section absent) leaves kiosk to the
 /// user setting. Either pin is a locked override.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ProvisionedKiosk {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
-}
-
-impl Default for ProvisionedKiosk {
-    fn default() -> Self {
-        Self { enabled: None }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -325,11 +319,11 @@ fn read_registry(key_path: &str, value_name: &str) -> ReadOutcome {
         let mut len: u32 = 0;
         let status = RegQueryValueExW(key, name, None, Some(&mut value_type), None, Some(&mut len));
         if status == ERROR_FILE_NOT_FOUND {
-            RegCloseKey(key);
+            let _ = RegCloseKey(key);
             return ReadOutcome::Absent;
         }
         if status != ERROR_SUCCESS && status != ERROR_MORE_DATA {
-            RegCloseKey(key);
+            let _ = RegCloseKey(key);
             return ReadOutcome::Failure(format!("cannot query registry value: {status:?}"));
         }
         // Second pass: fetch the payload.
@@ -343,7 +337,7 @@ fn read_registry(key_path: &str, value_name: &str) -> ReadOutcome {
             Some(buf.as_mut_ptr()),
             Some(&mut actual),
         );
-        RegCloseKey(key);
+        let _ = RegCloseKey(key);
         if status != ERROR_SUCCESS {
             return ReadOutcome::Failure(format!("cannot read registry value: {status:?}"));
         }

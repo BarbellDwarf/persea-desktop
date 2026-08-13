@@ -45,9 +45,9 @@
 //!   state-changing native calls.
 //! - `instances::capability` gates the whole feature.
 
-//! `registered_tokens`, `token_for` and `token_secret` are contract
-//! surface for the poller that lands after this module; they carry an
-//! allow until wired in.
+//!   `registered_tokens`, `token_for` and `token_secret` are contract
+//!   surface for the poller that lands after this module; they carry an
+//!   allow until wired in.
 #![allow(dead_code)]
 
 use std::collections::HashMap;
@@ -388,7 +388,7 @@ async fn persist_approval(
         let old_user = keyring_user(instance_url, old_id);
         let _ = keyring::keyring_delete(SERVICE_NAME.to_string(), old_user, app.clone()).await;
     }
-    with_registry(app, |registry| registry.save())?;
+    let _ = with_registry(app, |registry| registry.save())?;
     Ok(())
 }
 
@@ -769,7 +769,7 @@ pub async fn pairing_revoke(
         app.clone(),
     )
     .await;
-    with_registry(&app, |r| {
+    let _ = with_registry(&app, |r| {
         r.remove(&url, token_id);
         r.save()
     })?;

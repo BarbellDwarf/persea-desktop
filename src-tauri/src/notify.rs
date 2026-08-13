@@ -46,9 +46,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 /// App id used for Windows toast AUMID matching; ignored elsewhere.
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(test)))]
 const APP_ID: &str = "dev.persea.desktop";
 /// App name shown in the notification header.
+#[cfg(not(test))]
 const APP_NAME: &str = "Persea Desktop";
 /// Config file name in the app data dir.
 const CONFIG_FILE: &str = "notifications.json";
@@ -56,16 +57,10 @@ const CONFIG_FILE: &str = "notifications.json";
 static CONFIG: Mutex<Option<Arc<Mutex<NotifyConfig>>>> = Mutex::new(None);
 
 /// Persisted notification settings. Quiet defaults: off.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 struct NotifyConfig {
     #[serde(default)]
     enabled: bool,
-}
-
-impl Default for NotifyConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
 }
 
 /// Load the config from the app data dir. Call once from the setup hook
@@ -260,6 +255,7 @@ pub fn session_idle_warning(app: &AppHandle, name: &str) {
 
 /// Transfer-complete placeholder (drag-drop uploads, D11): the hook the
 /// transfer feature calls when a native upload finishes.
+#[allow(dead_code)] // wired by the transfer feature (D11); placeholder until then
 pub fn transfer_complete(app: &AppHandle, name: &str) {
     notify(
         app,
@@ -271,6 +267,7 @@ pub fn transfer_complete(app: &AppHandle, name: &str) {
 
 /// Update-available placeholder (auto-update, D13): the hook the updater
 /// calls when a new version is ready.
+#[allow(dead_code)] // wired by the updater (D13); placeholder until then
 pub fn update_available(app: &AppHandle, version: &str) {
     notify(
         app,
@@ -308,8 +305,7 @@ mod tests {
     fn config_round_trip_preserves_enabled() {
         let path = tmp_path("roundtrip");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        let mut c = NotifyConfig::default();
-        c.enabled = true;
+        let mut c = NotifyConfig { enabled: true };
         std::fs::write(&path, serde_json::to_string(&c).unwrap()).unwrap();
         assert!(load(&path).enabled);
         c.enabled = false;

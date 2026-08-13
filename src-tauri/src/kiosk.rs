@@ -18,7 +18,7 @@
 //! # Activation (locked design)
 //!
 //! Precedence: provision override (`provisioning::kiosk_enabled_override`)
-//! > per-instance user config (`instances.json` `kioskAllowed`) > off.
+//! \> per-instance user config (`instances.json` `kioskAllowed`) > off.
 //! Two gates apply on top, both fail closed:
 //!
 //! 1. Server gate: the instance probe must report `kiosk_allowed`
@@ -379,8 +379,7 @@ fn chord_pressed(app: &tauri::AppHandle) {
     };
     match action {
         ChordAction::Armed => eprintln!(
-            "[kiosk] exit chord pressed; press it again within {}s to leave kiosk mode",
-            CHORD_CONFIRM_WINDOW_SECS
+            "[kiosk] exit chord pressed; press it again within {CHORD_CONFIRM_WINDOW_SECS}s to leave kiosk mode"
         ),
         ChordAction::Confirmed => exit(app),
     }

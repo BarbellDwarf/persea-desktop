@@ -790,7 +790,7 @@ pub async fn handle_drop(
     show_transfer_window(&app);
     let planned = plan_uploads(&paths, &entries, |name| conflict_prompt(&app, name));
     for upload in planned {
-        spawn_upload(
+        let _ = spawn_upload(
             app.clone(),
             instance.clone(),
             session_id.clone(),

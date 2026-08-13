@@ -302,13 +302,11 @@ impl HotkeysState {
             // OS freed the chord in the meantime.
         }
         let status = register_chord(self, id, chord);
-        if status == HotkeyStatus::Registered {
-            if old != chord {
-                let _ = self.registry.unregister(&old);
-                self.file.set_shortcut(id, chord.to_string());
-                if let Err(e) = self.file.save(&self.path) {
-                    eprintln!("[hotkeys] cannot persist hotkeys.json: {e}");
-                }
+        if status == HotkeyStatus::Registered && old != chord {
+            let _ = self.registry.unregister(&old);
+            self.file.set_shortcut(id, chord.to_string());
+            if let Err(e) = self.file.save(&self.path) {
+                eprintln!("[hotkeys] cannot persist hotkeys.json: {e}");
             }
         }
         self.statuses.insert(id, status);
