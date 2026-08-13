@@ -196,7 +196,8 @@ fn resolve_session(label: &str) -> Option<(String, String)> {
     let tab = if label == windows::MAIN_WINDOW_LABEL {
         tabs.iter().find(|t| t.active && t.mode == "inline")
     } else {
-        tabs.iter().find(|t| windows::session_window_label(&t.id) == label)
+        tabs.iter()
+            .find(|t| windows::session_window_label(&t.id) == label)
     }?;
     let url = Url::parse(&tab.url).ok()?;
     let session_id = windows::session_id_from_url(&url)?;
@@ -227,8 +228,7 @@ fn position_overlay(win: &WebviewWindow, position: PhysicalPosition<f64>) {
         };
         // Clamp so the overlay stays fully inside the target window; a
         // window smaller than the overlay pins it to the top-left.
-        let max_x =
-            (win_pos.x + win_size.width as i32 - overlay_size.width as i32).max(win_pos.x);
+        let max_x = (win_pos.x + win_size.width as i32 - overlay_size.width as i32).max(win_pos.x);
         let max_y =
             (win_pos.y + win_size.height as i32 - overlay_size.height as i32).max(win_pos.y);
         let x = (win_pos.x + position.x as i32 - (overlay_size.width / 2) as i32)

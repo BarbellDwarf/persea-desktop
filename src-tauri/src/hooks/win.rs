@@ -41,13 +41,11 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::Input::KeyboardAndMouse::{
-    VK_LWIN, VK_RWIN,
-};
+use windows::Win32::UI::Input::KeyboardAndMouse::{VK_LWIN, VK_RWIN};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, PeekMessageW, SetWindowsHookExW, TranslateMessage,
-    UnhookWindowsHookEx, HC_ACTION, KBDLLHOOKSTRUCT, MSG, PM_REMOVE, WH_KEYBOARD_LL,
-    WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    UnhookWindowsHookEx, HC_ACTION, KBDLLHOOKSTRUCT, MSG, PM_REMOVE, WH_KEYBOARD_LL, WM_KEYDOWN,
+    WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
 /// The idle wait of the pump loop when the queue is empty. The hook proc
@@ -101,7 +99,8 @@ impl crate::hooks::KeyboardHook for WinHook {
 }
 
 fn run_pump(stop: Arc<AtomicBool>) {
-    let hook = match unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_kb_proc), None, 0) } {
+    let hook = match unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_kb_proc), None, 0) }
+    {
         Ok(hook) => hook,
         Err(e) => {
             eprintln!("[hooks] SetWindowsHookExW(WH_KEYBOARD_LL) failed: {e}");

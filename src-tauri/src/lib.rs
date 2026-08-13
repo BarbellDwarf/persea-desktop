@@ -1,14 +1,18 @@
 mod bridge;
 mod dialogs;
 mod downloads;
+mod drop;
+mod hooks;
 mod hotkeys;
 mod http;
 mod instances;
 mod keyring;
+mod kiosk;
 mod navigation;
 mod pairing;
 mod provisioning;
 mod shell_config;
+mod transfer;
 mod windows;
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
@@ -41,6 +45,11 @@ pub fn run() {
             }
             hotkeys::setup(app)?;
 
+            // Kiosk decision before the main window exists (the chord
+            // registers here; entry happens after the window manager is
+            // up so the tab strip can be hidden).
+            kiosk::setup(app)?;
+
             // The main window is code-built: on_navigation and
             // on_new_window are build-time-only in tauri 2.11, so a
             // config-declared window can never carry the lockdown
@@ -61,6 +70,11 @@ pub fn run() {
                     .center()
                     .initialization_script(bridge::init_script())
                     .data_directory(data_dir);
+            let builder = if kiosk::is_active() {
+                builder.devtools(false)
+            } else {
+                builder
+            };
             let builder = match store_id {
                 Some(id) => builder.data_store_identifier(id),
                 None => builder,
@@ -76,6 +90,17 @@ pub fn run() {
             // Session window/tab manager: needs the main window to exist
             // (it builds the tabstrip window and session windows).
             windows::setup(app)?;
+
+            // Kiosk entry after the window manager is up (the strip must
+            // exist to be hidden).
+            if kiosk::is_active() {
+                kiosk::enter(app.handle());
+            }
+
+            // Transfers + drag-drop: after the window manager (drops land
+            // on its windows).
+            transfer::setup(app)?;
+            drop::setup(app)?;
 
             // Auto-open the default/last instance now that the window
             // exists (the same call auto_open made early was a silent
@@ -126,6 +151,11 @@ pub fn run() {
             windows::cmd_tabs_default_mode_set,
             windows::cmd_tabs_context_menu,
             windows::cmd_monitors_list,
+            transfer::cmd_transfers_list,
+            transfer::cmd_transfer_retry,
+            transfer::cmd_transfer_open_folder,
+            transfer::cmd_transfer_clear_finished,
+            transfer::cmd_transfer_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persea Desktop");

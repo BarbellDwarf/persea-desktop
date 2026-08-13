@@ -25,6 +25,11 @@ fn main() {
             "cmd_tabs_default_mode_set",
             "cmd_tabs_context_menu",
             "cmd_monitors_list",
+            "cmd_transfers_list",
+            "cmd_transfer_retry",
+            "cmd_transfer_open_folder",
+            "cmd_transfer_clear_finished",
+            "cmd_transfer_download",
         ]));
     tauri_build::try_build(attributes).expect("tauri-build with app manifest failed");
 }

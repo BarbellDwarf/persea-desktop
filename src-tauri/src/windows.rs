@@ -790,11 +790,15 @@ impl TabState {
 
     pub fn note_window_focused(&mut self, label: &str) -> Vec<Effect> {
         let Some(id) = label.strip_prefix(SESSION_WINDOW_PREFIX) else {
+            // A non-session window took focus: no key injection target.
+            crate::hooks::set_session_focus(false);
             return Vec::new();
         };
         if !self.tabs.iter().any(|t| t.id == id) {
+            crate::hooks::set_session_focus(false);
             return Vec::new();
         }
+        crate::hooks::set_session_focus(true);
         if self.active.as_deref() == Some(id) {
             return Vec::new();
         }

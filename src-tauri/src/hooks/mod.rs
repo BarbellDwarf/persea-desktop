@@ -88,7 +88,10 @@ impl std::fmt::Display for HookError {
         match self {
             Self::Unsupported => write!(f, "no keyboard hook on this platform"),
             Self::PermissionDenied => {
-                write!(f, "the OS denied input monitoring; grant it in System Settings")
+                write!(
+                    f,
+                    "the OS denied input monitoring; grant it in System Settings"
+                )
             }
             Self::Failed(e) => write!(f, "keyboard hook failed: {e}"),
         }
@@ -256,14 +259,14 @@ fn platform_hook_impl() -> Option<Arc<dyn KeyboardHook>> {
     }
 }
 
-#[cfg(target_os = "windows")]
-mod win;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "linux")]
-mod x11;
-#[cfg(target_os = "linux")]
 mod wayland;
+#[cfg(target_os = "windows")]
+mod win;
+#[cfg(target_os = "linux")]
+mod x11;
 
 #[cfg(test)]
 mod tests {

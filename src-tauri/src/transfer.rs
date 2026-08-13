@@ -216,34 +216,24 @@ impl DropReject {
 
     pub fn message(&self) -> String {
         match self {
-            DropReject::Disabled => {
-                "File transfers are disabled by this server. \
+            DropReject::Disabled => "File transfers are disabled by this server. \
                  The in-session upload button still works."
-                    .to_string()
-            }
-            DropReject::PairRequired => {
-                "File transfers need a paired device token. \
+                .to_string(),
+            DropReject::PairRequired => "File transfers need a paired device token. \
                  Pair this device from the settings page first."
-                    .to_string()
-            }
-            DropReject::SshOnly => {
-                "SSH sessions do not support drag-drop transfers yet. \
+                .to_string(),
+            DropReject::SshOnly => "SSH sessions do not support drag-drop transfers yet. \
                  Use the upload button inside the session to send files."
-                    .to_string()
-            }
+                .to_string(),
             DropReject::SessionGone => {
                 "The session is no longer active. Reconnect and try again.".to_string()
             }
-            DropReject::NotOwner => {
-                "The paired token does not own this session. \
+            DropReject::NotOwner => "The paired token does not own this session. \
                  Pair with the account that started it."
-                    .to_string()
-            }
-            DropReject::TokenRejected => {
-                "The paired token was rejected by the server. \
+                .to_string(),
+            DropReject::TokenRejected => "The paired token was rejected by the server. \
                  Re-pair this device from the settings page."
-                    .to_string()
-            }
+                .to_string(),
             DropReject::Unreachable(message) => format!("Could not reach the server: {message}"),
         }
     }
@@ -321,8 +311,8 @@ impl DriveClient {
         session_id: &str,
         name: Option<&str>,
     ) -> Result<Url, String> {
-        let mut url =
-            Url::parse(instance.trim_end_matches('/')).map_err(|e| format!("invalid instance URL: {e}"))?;
+        let mut url = Url::parse(instance.trim_end_matches('/'))
+            .map_err(|e| format!("invalid instance URL: {e}"))?;
         url.set_path(&format!("/api/sessions/{session_id}/drive-files"));
         if let Some(name) = name {
             url.path_segments_mut()
@@ -782,10 +772,7 @@ pub async fn handle_drop(
         );
         return;
     };
-    let resp = match drive_client()
-        .list(&instance, &session_id, &bearer)
-        .await
-    {
+    let resp = match drive_client().list(&instance, &session_id, &bearer).await {
         Ok(resp) => resp,
         Err(e) => {
             let reject = DropReject::Unreachable(e);
@@ -837,15 +824,7 @@ pub fn spawn_upload(
     });
     emit_changed(&app);
     tauri::async_runtime::spawn(async move {
-        let outcome = upload_one(
-            &app,
-            id,
-            &instance,
-            &session_id,
-            &local_path,
-            &remote_name,
-        )
-        .await;
+        let outcome = upload_one(&app, id, &instance, &session_id, &local_path, &remote_name).await;
         match outcome {
             Ok(total) => {
                 with_row(id, |t| {
@@ -905,9 +884,7 @@ pub async fn upload_one(
         emit_changed(app);
         http::sleep(Duration::from_millis(PROGRESS_POLL_MS)).await;
     }
-    let bytes = read
-        .await
-        .map_err(|e| format!("read task failed: {e}"))??;
+    let bytes = read.await.map_err(|e| format!("read task failed: {e}"))??;
     with_row(row_id, |t| {
         t.status = TransferStatus::Uploading;
         t.bytes_done = total;
@@ -991,8 +968,7 @@ pub async fn download_drive_file(
     let total = bytes.len() as u64;
     let saved = path.clone();
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        std::fs::write(&saved, &bytes)
-            .map_err(|e| format!("cannot write {}: {e}", saved.display()))
+        std::fs::write(&saved, &bytes).map_err(|e| format!("cannot write {}: {e}", saved.display()))
     })
     .await
     .map_err(|e| format!("write task failed: {e}"))??;
@@ -1216,7 +1192,13 @@ pub async fn cmd_transfer_retry(app: AppHandle, id: u64) -> Result<(), String> {
     let Some(planned) = planned.into_iter().next() else {
         return Ok(());
     };
-    spawn_upload(app, instance, session_id, planned.local_path, planned.remote_name)?;
+    spawn_upload(
+        app,
+        instance,
+        session_id,
+        planned.local_path,
+        planned.remote_name,
+    )?;
     Ok(())
 }
 
@@ -1441,10 +1423,7 @@ mod tests {
             i += 1;
             choice
         });
-        let names: Vec<&str> = planned
-            .iter()
-            .map(|p| p.remote_name.as_str())
-            .collect();
+        let names: Vec<&str> = planned.iter().map(|p| p.remote_name.as_str()).collect();
         assert_eq!(names, vec!["a.txt", "b.txt", "c (1).txt"]);
         assert_eq!(i, 2);
     }
@@ -1457,10 +1436,7 @@ mod tests {
             &existing,
             |_| ConflictChoice::Cancel,
         );
-        let names: Vec<&str> = planned
-            .iter()
-            .map(|p| p.remote_name.as_str())
-            .collect();
+        let names: Vec<&str> = planned.iter().map(|p| p.remote_name.as_str()).collect();
         assert_eq!(names, vec!["b.txt"]);
     }
 
@@ -1471,24 +1447,21 @@ mod tests {
             &[],
             |_| ConflictChoice::Cancel,
         );
-        let names: Vec<&str> = planned
-            .iter()
-            .map(|p| p.remote_name.as_str())
-            .collect();
+        let names: Vec<&str> = planned.iter().map(|p| p.remote_name.as_str()).collect();
         assert_eq!(names, vec!["x.txt", "y.bin"]);
     }
 
     #[test]
     fn plan_uploads_sanitizes_hostile_names() {
         let planned = plan_uploads(
-            &[PathBuf::from("/tmp/a/b:c.txt"), PathBuf::from("/tmp/..hidden")],
+            &[
+                PathBuf::from("/tmp/a/b:c.txt"),
+                PathBuf::from("/tmp/..hidden"),
+            ],
             &[],
             |_| ConflictChoice::Cancel,
         );
-        let names: Vec<&str> = planned
-            .iter()
-            .map(|p| p.remote_name.as_str())
-            .collect();
+        let names: Vec<&str> = planned.iter().map(|p| p.remote_name.as_str()).collect();
         assert_eq!(names, vec!["b_c.txt", "hidden"]);
     }
 
@@ -1570,7 +1543,10 @@ mod tests {
                 "a.txt".to_string()
             ))
         );
-        assert_eq!(parse_drive_url("blob:https://persea.example.com/uuid"), None);
+        assert_eq!(
+            parse_drive_url("blob:https://persea.example.com/uuid"),
+            None
+        );
         assert_eq!(
             parse_drive_url("https://persea.example.com/export/report.csv"),
             None

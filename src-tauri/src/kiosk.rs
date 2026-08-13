@@ -213,7 +213,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 instance: target.url.clone(),
                 armed_at: None,
             });
-            eprintln!("[kiosk] kiosk decided on {}; exit chord {}", target.url, EXIT_CHORD);
+            eprintln!(
+                "[kiosk] kiosk decided on {}; exit chord {}",
+                target.url, EXIT_CHORD
+            );
         }
         Err(e) => {
             eprintln!("[kiosk] kiosk stays off: the exit chord cannot be registered: {e}");
@@ -250,7 +253,9 @@ pub fn enter(app: &tauri::AppHandle) {
         win.on_window_event(move |event| {
             if let tauri::WindowEvent::CloseRequested { signal_tx, .. } = event {
                 if crate::kiosk::is_active() {
-                    eprintln!("[kiosk] close requests are blocked in kiosk mode; use the exit chord");
+                    eprintln!(
+                        "[kiosk] close requests are blocked in kiosk mode; use the exit chord"
+                    );
                     let _ = signal_tx.send(true);
                 }
             }
@@ -278,7 +283,9 @@ pub fn exit(app: &tauri::AppHandle) {
         s.armed_at = None;
     }
     if let Err(e) = unregister_exit_chord(app) {
-        eprintln!("[kiosk] exit chord could not be released ({e}); it stays inert while kiosk is off");
+        eprintln!(
+            "[kiosk] exit chord could not be released ({e}); it stays inert while kiosk is off"
+        );
     }
     crate::hotkeys::set_enabled(true);
     crate::windows::set_strip_visible(true);
@@ -325,7 +332,9 @@ pub fn active_instance() -> Option<String> {
 /// inert.
 fn register_exit_chord(app: &tauri::AppHandle) -> Result<(), String> {
     let Some(global) = app.try_state::<GlobalShortcut<tauri::Wry>>() else {
-        return Err("the global-shortcut plugin is not installed (unsupported platform)".to_string());
+        return Err(
+            "the global-shortcut plugin is not installed (unsupported platform)".to_string(),
+        );
     };
     global
         .on_shortcut(
@@ -511,7 +520,10 @@ mod tests {
             "a stale press re-arms instead of confirming"
         );
         assert_eq!(
-            on_chord_press(Some(t0), t0 + Duration::from_secs(CHORD_CONFIRM_WINDOW_SECS)),
+            on_chord_press(
+                Some(t0),
+                t0 + Duration::from_secs(CHORD_CONFIRM_WINDOW_SECS)
+            ),
             ChordAction::Confirmed,
             "a press exactly at the window edge confirms"
         );
