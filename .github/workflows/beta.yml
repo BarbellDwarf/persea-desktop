@@ -44,10 +44,10 @@ jobs:
         run: |
           set -euo pipefail
           gh release delete beta --yes --cleanup-tag >/dev/null 2>&1 || true
-          RELEASE_ID=$(gh release create beta --target "$GITHUB_SHA" --draft --prerelease \
+          gh release create beta --target "$GITHUB_SHA" --draft --prerelease \
             --title "Persea Desktop beta" \
-            --notes "Rolling beta build of $GITHUB_REF_NAME ($GITHUB_SHA). See docs/beta.md." \
-            --json id --jq .id)
+            --notes "Rolling beta build of $GITHUB_REF_NAME ($GITHUB_SHA). See docs/beta.md."
+          RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/beta" --jq .id)
           VERSION=$(jq -r .version src-tauri/tauri.conf.json)
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "beta_version=${VERSION}-beta.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"

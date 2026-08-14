@@ -44,7 +44,8 @@ jobs:
               done
             gh release edit "$TAG" --draft=true
           else
-            RELEASE_ID=$(gh release create "$TAG" --draft --title "Persea Desktop $TAG" --generate-notes --json id --jq .id)
+            gh release create "$TAG" --draft --title "Persea Desktop $TAG" --generate-notes
+            RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)
           fi
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
 
