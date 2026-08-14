@@ -119,11 +119,12 @@ function renderProbeSummary(container, inst) {
     parts.push('<p class="probe-pending">Server not checked yet.</p>');
   } else if (!probe.ok) {
     const known = probe.version && probe.version !== "unknown";
-    parts.push(
-      '<p class="probe-error">Unreachable' +
-        (known ? " — last known version " + escapeHtml(probe.version) : " — never reached") +
-        ".</p>"
-    );
+    const detail = probe.error
+      ? probe.error
+      : known
+        ? "last known version " + probe.version
+        : "never reached";
+    parts.push('<p class="probe-error">Unreachable — ' + escapeHtml(detail) + ".</p>");
   } else {
     parts.push('<p class="probe-pending">Server version ' + escapeHtml(probe.version) + "</p>");
     if (probe.updateAvailable && probe.latestVersion) {

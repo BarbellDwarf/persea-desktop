@@ -28,10 +28,13 @@ function statusLine(inst) {
   }
   if (!probe.ok) {
     const known = probe.version && probe.version !== "unknown";
+    const detail = probe.error
+      ? probe.error
+      : known
+        ? "last known version " + probe.version
+        : "never reached";
     return {
-      text: known
-        ? "Unreachable — last known version " + probe.version
-        : "Unreachable — never reached",
+      text: "Unreachable — " + detail,
       cls: "offline",
     };
   }

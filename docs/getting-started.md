@@ -41,6 +41,16 @@ Launch Persea Desktop. The first window shows the welcome page with an
    version and capabilities.
 4. Click **Open server** to open it.
 
+The server must present a TLS certificate this system trusts. A public
+certificate (Let's Encrypt, a commercial CA) works out of the box. For
+a private CA, install the CA certificate into the operating system's
+trust store (on Linux, copy it to `/usr/local/share/ca-certificates/`
+and run `sudo update-ca-certificates`) before adding the server; both
+the probe and the webview then accept it. If the certificate is not
+trusted, the add form reports `Unreachable — the server's TLS
+certificate is not trusted by this system`, and opening the server
+shows the browser-style certificate error page.
+
 You can add more servers any time in Settings → Instances. Each server
 keeps its own login, sessions and data store, so signing in to one
 never touches another. The app opens the default (or last used)
@@ -124,6 +134,10 @@ a browser tab, the session opens in the app:
 - **The tray**: the tray menu lists your servers and their live
   sessions, shows pairing status and offers About and Quit. The tray
   icon shows a dot while sessions are active and a hollow ring when a
-  server rejected your token (re-pair to resume).
+  server rejected your token (re-pair to resume). On Linux the app
+  quits when you close its window (the tray is not guaranteed to be
+  visible there, especially under Wayland); on macOS and Windows
+  closing the window keeps the app in the tray, and Quit lives in the
+  tray or the app menu.
 - **Kiosk mode**: if your administrator enabled it, the app can lock
   itself to a single server in fullscreen. See [kiosk.md](kiosk.md).

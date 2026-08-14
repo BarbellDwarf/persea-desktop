@@ -113,7 +113,24 @@ pub fn run() {
                 builder = builder.devtools(false);
             }
             let builder = windows::lock_viewport_builder(builder, app.handle().clone());
-            builder.build()?;
+            let main = builder.build()?;
+
+            // Linux: the tray and the in-window menu bar are unreliable
+            // on Wayland (no appindicator support), so closing the main
+            // window would strand the process with no visible way to
+            // quit. Quit for real on close; kiosk keeps its own
+            // prevent-close handler (registered at kiosk entry).
+            #[cfg(target_os = "linux")]
+            {
+                let app_handle = app.handle().clone();
+                main.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { .. } = event {
+                        if !crate::kiosk::is_active() {
+                            app_handle.exit(0);
+                        }
+                    }
+                });
+            }
 
             // Bridge: validate the runtime instance origins against the
             // baked remote-URL allowlist (fail closed), install the

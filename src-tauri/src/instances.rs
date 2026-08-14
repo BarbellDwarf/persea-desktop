@@ -85,6 +85,10 @@ pub struct CachedProbe {
     pub needs_setup: bool,
     #[serde(default, rename = "checkedAt")]
     pub checked_at: u64,
+    /// Friendly reason for a failed probe (TLS trust, DNS, connectivity),
+    /// shown in the shell's server summaries. None while the probe is ok.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// On-disk shape of `instances.json`.
@@ -591,7 +595,7 @@ pub async fn probe_server(base_url: &str) -> CachedProbe {
         .build()
     {
         Ok(c) => c,
-        Err(_) => return unreachable_probe(),
+        Err(_) => return unreachable_probe("the probe client could not be built".to_string()),
     };
     match fetch_status(&client, &base).await {
         Ok((version, capabilities, latest_version, update_available)) => {
@@ -604,13 +608,30 @@ pub async fn probe_server(base_url: &str) -> CachedProbe {
                 update_available,
                 needs_setup,
                 checked_at: now_secs(),
+                error: None,
             }
         }
-        Err(_) => unreachable_probe(),
+        Err(e) => unreachable_probe(classify_probe_error(&e)),
     }
 }
 
-fn unreachable_probe() -> CachedProbe {
+/// Map a probe failure to a short, user-actionable message. The raw
+/// reqwest/rustls text is long and jargon-heavy; the shell surfaces the
+/// classified reason directly in the server summaries.
+fn classify_probe_error(raw: &str) -> String {
+    let low = raw.to_ascii_lowercase();
+    if low.contains("certificate") || low.contains("tls") || low.contains("ssl") {
+        "the server's TLS certificate is not trusted by this system".to_string()
+    } else if low.contains("resolve") || low.contains("lookup") || low.contains("dns") {
+        "the server hostname could not be resolved".to_string()
+    } else if low.contains("refused") || low.contains("timed out") || low.contains("timeout") {
+        "the server did not respond (connection refused or timed out)".to_string()
+    } else {
+        "the server could not be reached".to_string()
+    }
+}
+
+fn unreachable_probe(reason: String) -> CachedProbe {
     CachedProbe {
         ok: false,
         version: "unknown".to_string(),
@@ -619,6 +640,7 @@ fn unreachable_probe() -> CachedProbe {
         update_available: false,
         needs_setup: false,
         checked_at: now_secs(),
+        error: Some(reason),
     }
 }
 
@@ -1046,6 +1068,7 @@ mod tests {
                 update_available: true,
                 needs_setup: false,
                 checked_at: 42,
+                error: None,
             }),
         });
         store.file.instances.push(Instance {
@@ -1188,8 +1211,9 @@ mod tests {
             update_available: false,
             needs_setup: false,
             checked_at: 1,
+            error: None,
         };
-        let merged = apply_probe(Some(probe.clone()), unreachable_probe());
+        let merged = apply_probe(Some(probe.clone()), unreachable_probe("down".into()));
         assert!(!merged.ok);
         assert_eq!(merged.version, "1.0.0");
         assert!(merged.capabilities["kiosk_allowed"]);
@@ -1197,9 +1221,29 @@ mod tests {
         let fresh = apply_probe(Some(probe.clone()), probe.clone());
         assert!(fresh.ok);
         // Never-probed instance: unreachable outcome stands as-is.
-        let none = apply_probe(None, unreachable_probe());
+        let none = apply_probe(None, unreachable_probe("down".into()));
         assert!(!none.ok);
         assert_eq!(none.version, "unknown");
+    }
+
+    #[test]
+    fn probe_error_classification() {
+        assert_eq!(
+            classify_probe_error("error sending request: invalid peer certificate: UnknownIssuer"),
+            "the server's TLS certificate is not trusted by this system"
+        );
+        assert_eq!(
+            classify_probe_error("dns error: failed to lookup address for persea.example.com"),
+            "the server hostname could not be resolved"
+        );
+        assert_eq!(
+            classify_probe_error("connection refused: tcp connect error"),
+            "the server did not respond (connection refused or timed out)"
+        );
+        assert_eq!(
+            classify_probe_error("builder error: something weird"),
+            "the server could not be reached"
+        );
     }
 
     #[test]
