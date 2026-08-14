@@ -109,7 +109,8 @@ and CI.
 ## Support
 
 Persea Desktop is part of the persea project, funded by its community.
-If the app saves you time, consider supporting the project on
+If the app saves you time, consider sponsoring the project on
+[GitHub Sponsors](https://github.com/sponsors/barbelldwarf) or supporting it on
 [Ko-Fi](https://ko-fi.com/barbelldwarf): contributions pay for CI
 infrastructure, cross-platform build and signing certificates, test
 machines, and development time.
