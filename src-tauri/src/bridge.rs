@@ -17,10 +17,15 @@
 //! `deny_unknown_fields`), so the capability file is the whole mechanism.
 //!
 //! Capabilities are compiled into the binary at build time, so the instance
-//! origins are build-time data: D02's instance provisioning writes them into
-//! `src-tauri/capabilities/remote.json`, and [`register`] validates every
-//! runtime-configured instance origin against that baked allowlist, failing
-//! closed (unlisted origins get no bridge).
+//! origins are build-time data: `build.rs` merges the origins from
+//! `src-tauri/remote-urls.txt` (one origin per line, checked in empty) into
+//! `src-tauri/capabilities/remote.json` before tauri-build compiles the ACL.
+//! [`register`] validates every runtime-configured instance origin against
+//! that baked allowlist, failing closed (unlisted origins get no bridge).
+//! An origin added to the instance store after the build only gets bridge
+//! features when the builder allowlisted it; with the empty checked-in
+//! default, no origin is allowlisted and the bridge stays disabled until a
+//! deployment explicitly grants origins.
 
 use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
@@ -121,8 +126,8 @@ impl std::error::Error for BridgeError {
 /// listeners, and stores the app handle used by the emit helpers.
 ///
 /// Returns the origins that passed validation; an empty list means the bridge
-/// stays disabled. The caller (D02's probe flow) decides whether to report
-/// [`desktop_bridge_available`] as true via [`set_bridge_available`].
+/// stays disabled. The caller (the startup probe flow) decides whether to
+/// report [`desktop_bridge_available`] as true via [`set_bridge_available`].
 ///
 /// The init script (see [`init_script`]) cannot be attached to an existing
 /// webview: Tauri 2.11 applies initialization scripts only at webview
@@ -209,7 +214,15 @@ pub fn init_script() -> &'static str {
 /// capability allowlist. Returns the subset that matches, logging a warning
 /// for every origin that is not covered (fail closed).
 pub fn validate_origins(instance_origins: &[String]) -> Vec<String> {
-    let capability: RemoteCapabilityFile = match serde_json::from_str(REMOTE_CAPABILITY_JSON) {
+    validate_origins_from(REMOTE_CAPABILITY_JSON, instance_origins)
+}
+
+/// [`validate_origins`] against explicit capability file content (test
+/// seam). The shipped file is the empty allowlist default; the build-time
+/// populated state only exists in builds that merge `remote-urls.txt`, so
+/// the tests exercise it through this seam.
+fn validate_origins_from(capability_json: &str, instance_origins: &[String]) -> Vec<String> {
+    let capability: RemoteCapabilityFile = match serde_json::from_str(capability_json) {
         Ok(c) => c,
         Err(e) => {
             eprintln!(
@@ -549,6 +562,50 @@ mod tests {
                 "an empty remote urls list must refuse every origin"
             );
         }
+    }
+
+    #[test]
+    fn populated_capability_admits_allowlisted_origins_only() {
+        // The state build.rs produces when remote-urls.txt carries
+        // origins: the urls array of the checked-in file is spliced with
+        // exactly those origins. Allowed origins must register; anything
+        // outside the baked list is refused (fail closed).
+        let populated = r#"{
+          "identifier": "remote",
+          "windows": ["main"],
+          "local": false,
+          "remote": { "urls": ["https://persea.example.com", "https://lab.example.com:8443"] },
+          "permissions": ["core:event:default"]
+        }"#;
+        let allowed = validate_origins_from(
+            populated,
+            &[
+                "https://persea.example.com".to_string(),
+                "https://lab.example.com:8443".to_string(),
+                "https://evil.example.net".to_string(),
+                "not a url".to_string(),
+            ],
+        );
+        assert_eq!(
+            allowed,
+            vec![
+                "https://persea.example.com".to_string(),
+                "https://lab.example.com:8443".to_string(),
+            ],
+            "only the baked origins may register; unlisted and malformed origins are refused"
+        );
+    }
+
+    #[test]
+    fn checked_in_remote_capability_keeps_the_build_splice_marker() {
+        // build.rs splices the allowlist file's origins into the urls
+        // array of this exact file before tauri-build compiles the ACL. A
+        // reformat that breaks the splice marker silently skips the merge
+        // (fail closed), so the checked-in shape is pinned here.
+        assert!(
+            REMOTE_CAPABILITY_JSON.contains("\"urls\": []"),
+            "remote.json must keep the compact empty urls array that build.rs splices into"
+        );
     }
 
     #[test]

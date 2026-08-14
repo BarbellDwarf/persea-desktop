@@ -1,0 +1,13 @@
+# Build-time remote-origin IPC allowlist.
+#
+# One origin per line: scheme://host[:port]. A leading *. on the host
+# allows subdomains. Anything else is ignored with a build warning.
+#
+# build.rs merges the entries below into capabilities/remote.json
+# (remote.urls) before tauri-build compiles the capability ACL, so the
+# origins here are the ONLY persea instances whose pages get Tauri event
+# IPC from this build. The file is checked in empty: an empty allowlist
+# keeps remote.json's urls empty and every remote origin gets zero IPC
+# (fail closed). Enterprise builds populate this file from their
+# provision document; the bridge re-validates the runtime instance store
+# against the baked allowlist at startup.
