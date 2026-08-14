@@ -179,7 +179,7 @@ fn manager() -> std::sync::MutexGuard<'static, DownloadsManager> {
 }
 
 /// The OS Downloads folder, or the home directory as a last resort.
-pub fn default_download_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+pub fn default_download_dir(app: &AppHandle) -> Option<PathBuf> {
     app.path()
         .download_dir()
         .ok()
@@ -194,7 +194,7 @@ pub fn set_download_dir(dir: Option<PathBuf>) {
 }
 
 /// Current download folder (the configured one, else the OS default).
-pub fn download_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+pub fn download_dir(app: &AppHandle) -> Option<PathBuf> {
     manager().dir.clone().or_else(|| default_download_dir(app))
 }
 
@@ -219,8 +219,8 @@ pub fn records() -> Vec<DownloadRecord> {
 /// `WKDownloadDelegate`), and wry derives it from the download
 /// attribute, so the anchor-provided name survives.
 pub fn handler<R: Runtime>(
-    app: AppHandle<R>,
-) -> impl for<'a> Fn(Webview<R>, DownloadEvent<'a>) -> bool + Send + Sync + 'static {
+    app: AppHandle,
+) -> impl Fn(Webview<R>, DownloadEvent<'_>) -> bool + Send + Sync + 'static {
     move |_webview, event| match event {
         DownloadEvent::Requested { url, destination } => {
             let Some(dir) = download_dir(&app) else {
@@ -273,7 +273,7 @@ pub fn handler<R: Runtime>(
 /// The plugin opens the dialog on the main thread itself and invokes
 /// the callback on a worker thread with the user's choice. A cancel (or
 /// a choice that cannot be resolved to a path) keeps the fallback.
-fn offer_save_dialog<R: Runtime>(app: &AppHandle<R>, url: String, fallback: PathBuf) {
+fn offer_save_dialog(app: &AppHandle, url: String, fallback: PathBuf) {
     let Some(name) = fallback
         .file_name()
         .and_then(|n| n.to_str())
