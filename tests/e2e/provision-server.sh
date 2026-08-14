@@ -48,7 +48,7 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-echo "[provision] PERSEA_E2E_BASE_URL=http://127.0.0.1:$PORT"
-echo "[provision] PERSEA_E2E_API_KEY=$KEY"
-echo "[provision] PERSEA_E2E_PID=$(cat "$WORK/persea.pid")"
-echo "[provision] PERSEA_E2E_WORK=$WORK"
+echo "PERSEA_E2E_BASE_URL=http://127.0.0.1:$PORT"
+echo "PERSEA_E2E_API_KEY=$KEY"
+echo "PERSEA_E2E_PID=$(cat "$WORK/persea.pid")"
+echo "PERSEA_E2E_WORK=$WORK"
