@@ -143,11 +143,11 @@ pub fn apply_gpu_env() {
 /// after a runtime toggle. macOS: wry/tauri expose no certificate-bypass
 /// API, so the system trust store is the only path there.
 pub fn apply_insecure_tls_policy(app: &tauri::AppHandle) {
-    if !crate::shell_config::allow_insecure_tls() {
-        return;
-    }
     #[cfg(target_os = "linux")]
     {
+        if !crate::shell_config::allow_insecure_tls() {
+            return;
+        }
         use tauri::Manager;
         use webkit2gtk::{WebContextExt, WebViewExt};
         if let Some(win) = app.get_webview_window(crate::windows::MAIN_WINDOW_LABEL) {
