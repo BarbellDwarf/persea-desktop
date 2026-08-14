@@ -6,7 +6,10 @@ fn main() {
     // default allow-all set, so the remote page (and any window without
     // the ACL grant) is rejected before the command runs. The keyring
     // commands gate the secret surface; the tab/monitor commands gate the
-    // window manager (remote pages must never drive shell windows).
+    // window manager (remote pages must never drive shell windows); the
+    // instances, pairing, hotkeys and shell-config commands gate the
+    // shell pages (their grants live in capabilities/default.json; keep
+    // this list and that file in sync).
     let attributes =
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
             "keyring_set",
@@ -35,6 +38,28 @@ fn main() {
             "cmd_transfer_download",
             "notifications_get_enabled",
             "notifications_set_enabled",
+            "cmd_instances_add",
+            "cmd_instances_list",
+            "cmd_instances_update",
+            "cmd_instances_remove",
+            "cmd_instances_set_default",
+            "cmd_instances_probe",
+            "cmd_instances_open",
+            "cmd_instances_open_default",
+            "cmd_instances_open_setup",
+            "cmd_shell_get_settings",
+            "cmd_shell_set_appearance",
+            "cmd_shell_set_gpu_acceleration",
+            "cmd_app_version",
+            "cmd_hotkeys_get_settings",
+            "cmd_hotkeys_set_shortcut",
+            "pairing_supported",
+            "pairing_start",
+            "pairing_status",
+            "pairing_cancel",
+            "pairing_open_confirm_page",
+            "pairing_list_tokens",
+            "pairing_revoke",
         ]));
     populate_remote_urls();
     tauri_build::try_build(attributes).expect("tauri-build with app manifest failed");
