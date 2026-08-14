@@ -167,6 +167,8 @@ jobs:
     needs: [build]
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v7
+
       - name: Un-draft the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
