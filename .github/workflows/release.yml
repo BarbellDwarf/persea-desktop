@@ -136,7 +136,7 @@ jobs:
         with:
           components: rustfmt, clippy
           rustflags: ""
-          targets: ${{ matrix.rust_targets }}
+          target: ${{ matrix.rust_targets }}
 
       - uses: Swatinem/rust-cache@v2
         with:
