@@ -54,6 +54,7 @@ jobs:
 
       - name: Provision the test persea server
         id: server
+        shell: bash
         run: |
           cd /tmp
           git clone --depth 1 --branch main https://github.com/persea-grove/persea.git
@@ -64,21 +65,39 @@ jobs:
         working-directory: tests/e2e
         run: npm install
 
-      - name: Run the E2E specs
+      - name: Run the E2E specs (Linux)
+        if: runner.os == 'Linux'
         working-directory: tests/e2e
         env:
           PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
           PERSEA_E2E_API_KEY: ${{ env.PERSEA_E2E_API_KEY }}
         run: xvfb-run -a node run-specs.js
 
-      - name: Capture the canonical desktop screenshots
-        if: github.event_name == 'workflow_dispatch'
+      - name: Run the E2E specs (macOS / Windows)
+        if: runner.os != 'Linux'
+        working-directory: tests/e2e
+        env:
+          PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
+          PERSEA_E2E_API_KEY: ${{ env.PERSEA_E2E_API_KEY }}
+        run: node run-specs.js
+
+      - name: Capture the canonical desktop screenshots (Linux)
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'Linux'
         working-directory: tests/e2e
         env:
           PERSEA_E2E_SHOTS: ../../docs/screenshots
           PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
           PERSEA_E2E_API_KEY: ${{ env.PERSEA_E2E_API_KEY }}
         run: xvfb-run -a node run-specs.js
+
+      - name: Capture the canonical desktop screenshots (macOS / Windows)
+        if: github.event_name == 'workflow_dispatch' && runner.os != 'Linux'
+        working-directory: tests/e2e
+        env:
+          PERSEA_E2E_SHOTS: ../../docs/screenshots
+          PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
+          PERSEA_E2E_API_KEY: ${{ env.PERSEA_E2E_API_KEY }}
+        run: node run-specs.js
 
       - name: Open a regeneration PR
         if: github.event_name == 'workflow_dispatch'
