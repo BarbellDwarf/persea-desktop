@@ -84,7 +84,7 @@ function seedInstances(instances) {
   const { homedir } = require("os");
   const { join } = require("path");
   const configDir = process.platform === "win32"
-    ? join(process.env.APPDATA, "dev.persea.desktop", "config")
+    ? join(process.env.APPDATA, "dev.persea.desktop")
     : process.platform === "darwin"
       ? join(homedir(), "Library", "Application Support", "dev.persea.desktop", "config")
       : join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "dev.persea.desktop");
