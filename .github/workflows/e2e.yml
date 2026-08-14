@@ -56,9 +56,13 @@ jobs:
         id: server
         shell: bash
         run: |
+          WS="$GITHUB_WORKSPACE"
+          if command -v cygpath >/dev/null 2>&1; then
+            WS="$(cygpath -u "$GITHUB_WORKSPACE")"
+          fi
           cd /tmp
           git clone --depth 1 --branch main https://github.com/persea-grove/persea.git
-          eval "$(echo "$GITHUB_WORKSPACE/tests/e2e/provision-server.sh /tmp/persea 8099" | tee /tmp/provision.env)"
+          eval "$(echo "$WS/tests/e2e/provision-server.sh /tmp/persea 8099" | tee /tmp/provision.env)"
           grep -E "PERSEA_E2E" /tmp/provision.env >> "$GITHUB_ENV"
 
       - name: Install the WebDriver client
