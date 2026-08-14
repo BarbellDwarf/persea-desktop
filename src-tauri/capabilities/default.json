@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Baseline capability for the main shell window only (D01). core:default covers invoke, events and basic window reads; core:tray:default prepares the tray (D08); the core:window:allow-* list covers window lifecycle for the multi-window manager (D05) and set-fullscreen for kiosk (D12). Remote pages get ZERO capabilities until D04 scopes remote IPC to the persea origin. Phase C pre-wiring (dispatcher, 2026-08-13): opener + clipboard-manager permissions for the shell pages. Phase C wiring: keyring commands granted to the main (shell) window only; remote origins get none.",
+  "description": "Baseline capability for the main shell window only (D01). core:default covers invoke, events and basic window reads; core:tray:default prepares the tray (D08); the core:window:allow-* list covers window lifecycle for the multi-window manager (D05) and set-fullscreen for kiosk (D12). Remote pages get ZERO capabilities until D04 scopes remote IPC to the persea origin. Phase C pre-wiring (dispatcher, 2026-08-13): opener + clipboard-manager permissions for the shell pages. Phase C wiring: keyring commands granted to the main (shell) window only; remote origins get none. dialog:allow-save grants the native save dialog for webview downloads (D05).",
   "windows": [
     "main",
     "tabstrip",
@@ -28,6 +28,7 @@
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-write-image",
+    "dialog:allow-save",
     "allow-keyring-set",
     "allow-keyring-get",
     "allow-keyring-delete",

@@ -8,8 +8,10 @@
 //!   dialog module; the only dialog-adjacent method on `WebviewWindow`
 //!   is the webview print dialog. Native message/confirm/save dialogs
 //!   come from `tauri-plugin-dialog` (JS `ask` / `confirm` / `message`
-//!   plus Rust `blocking_*` variants) — it is NOT pre-wired in this
-//!   crate (see the dispatcher list below).
+//!   plus Rust `blocking_*` variants); the plugin is pre-wired in this
+//!   crate and the save dialog is in use (see the save-dialog section
+//!   below and `downloads.rs`). The confirm round trip below is not
+//!   adopted.
 //! - **No script-dialog hooks in wry.** wry 0.55.1 exposes no
 //!   `ScriptDialogOpening` / `runJavaScriptConfirmPanel` delegate on any
 //!   platform (verified by reading the webview2 / webkitgtk / wkwebview
@@ -49,9 +51,9 @@
 //! page-to-shell event; the shell shows `blocking_ask`
 //! (tauri-plugin-dialog) and replies with a shell-to-page event
 //! carrying the boolean. That keeps `confirm()` synchronous at the call
-//! site and uses a real native dialog. It needs: (a) the server to emit
-//! a confirm request event for its confirm call sites, (b) the
-//! dispatcher to pre-wire the dialog plugin. This module's
+//! site and uses a real native dialog. It needs the server to emit a
+//! confirm request event for its confirm call sites (the dialog plugin
+//! itself is already pre-wired). This module's
 //! [`confirm_override_script`] is the shell side of that round trip,
 //! shipped ready to activate.
 //!
@@ -64,27 +66,28 @@
 //!
 //! ## Save dialogs
 //!
-//! The download interception (see `downloads.rs`) replaces the engine's
-//! destination path. A user-chosen folder needs the dialog plugin's
-//! `blocking_save_file`; the seam is documented there.
+//! Shipped in v1.2.0, wired in `downloads.rs`: every webview download
+//! is offered the plugin's native save dialog (`save_file(callback)`,
+//! async because the download handler runs on the main thread on every
+//! engine and the plugin's blocking variants wait on a main-thread
+//! dispatch). The engine writes to the download folder first; the
+//! user's choice is applied by moving the finished file. Cancel keeps
+//! the download folder. Requires `dialog:allow-save` (granted in the
+//! shell capability).
 //!
-//! # Wiring for the dispatcher
+//! # Wiring (done for the save dialog)
 //!
-//! 1. `Cargo.toml`: add `tauri-plugin-dialog = "2"`; register
-//!    `.plugin(tauri_plugin_dialog::init())`.
-//! 2. Capabilities: grant `dialog:allow-ask`, `dialog:allow-message`
-//!    and `dialog:allow-save` to the shell windows (`main` and the tab
-//!    strip) and — if the bridge confirm round-trip is adopted —
-//!    `dialog:allow-ask` to the remote capability for the instance
-//!    origins.
-//! 3. Apply [`confirm_override_script`] as an initialization script on
-//!    every webview that hosts persea pages (the window manager already
-//!    applies the bridge init script on session windows; add this one
-//!    alongside it once the plugin + server side exist).
-//!
-//! Do NOT wire it before the server side exists: without the request
-//! event, the script is inert, which is also why it ships as an
-//! opt-in string rather than part of the bridge init script.
+//! 1. `tauri-plugin-dialog = "2"` in `Cargo.toml`, registered via
+//!    `.plugin(tauri_plugin_dialog::init())` in `lib.rs`.
+//! 2. Capabilities: `dialog:allow-save` granted to the shell windows
+//!    (`main`, the tab strip, the transfer window).
+//! 3. The save dialog is live in `downloads.rs`. The confirm round trip
+//!    below is NOT wired: it needs the server page to emit the request
+//!    event and `dialog:allow-ask` / `dialog:allow-message` grants on
+//!    top of the current one. Do NOT wire it before the server side
+//!    exists: without the request event, the script is inert, which is
+//!    also why it ships as an opt-in string rather than part of the
+//!    bridge init script.
 
 /// Document-start script for the native confirm round trip.
 ///
