@@ -92,7 +92,12 @@ pub fn run() {
                     builder = builder.data_store_identifier(id);
                 }
             }
-            if let Some(args) = platform::webview2_gpu_args() {
+            if automation {
+                // msedgedriver attaches over CDP: WebView2 only writes the
+                // DevToolsActivePort file when remote debugging is in the
+                // environment's browser args.
+                builder = builder.additional_browser_args("--remote-debugging-port=0");
+            } else if let Some(args) = platform::webview2_gpu_args() {
                 builder = builder.additional_browser_args(args);
             }
             if kiosk::is_active() {
