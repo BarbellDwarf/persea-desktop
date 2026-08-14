@@ -10,7 +10,7 @@
 
 const { Builder } = require("selenium-webdriver");
 const { spawn } = require("child_process");
-const { mkdirSync } = require("fs");
+const { mkdirSync, writeFileSync } = require("fs");
 
 const APPS_DIR = process.env.PERSEA_E2E_APPS_DIR || "target/release";
 const APP_NAME = process.platform === "win32"
