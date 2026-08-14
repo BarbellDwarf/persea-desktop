@@ -1,7 +1,7 @@
-# Desktop bridge events (D04)
+# Desktop bridge events
 
 The shell and the persea page talk over Tauri's event bus. This document is
-the contract; the server side mirrors it in the S07 partial
+the contract; the server side mirrors it in the desktop bridge partial
 (`templates/partials/desktop_bridge.html` on the persea server, live on the
 v1.2.0 branch).
 
@@ -15,8 +15,8 @@ v1.2.0 branch).
   the capability file is the whole mechanism. There is no `all: true`; an
   origin that is not listed gets zero IPC, and every call from it is rejected
   by the ACL before it reaches any command.
-- Origins are build-time data (capabilities compile into the binary). D02's
-  instance provisioning writes the configured instance origins into
+- Origins are build-time data (capabilities compile into the binary). The
+  instance provisioning work writes the configured instance origins into
   `src-tauri/capabilities/remote.json` before building. At startup,
   `bridge::register` validates every configured instance origin against that
   baked allowlist and fails closed: unlisted origins get no bridge features
@@ -24,9 +24,10 @@ v1.2.0 branch).
 - `app.withGlobalTauri: true` in `tauri.conf.json` injects
   `window.__TAURI__` (the tauri crate's own `scripts/bundle.global.js`) on
   every page load, including remote persea pages. That is what the server's
-  S07 partial guards on; the global API itself is inert where the ACL denies.
+  desktop bridge partial guards on; the global API itself is inert where the
+  ACL denies.
 - The page must allow the IPC transports in CSP; the server handles that via
-  the `[desktop] allow_bridge` flag (S07), which adds `tauri://localhost` and
+  the `[desktop] allow_bridge` flag, which adds `tauri://localhost` and
   `http://ipc.localhost` to `connect-src`.
 - Shell-to-page delivery uses Tauri's internal emit, which is a no-op when
   the page has no listener for the event (no error, no console spam).
@@ -36,10 +37,10 @@ v1.2.0 branch).
   `WebviewWindowBuilder::initialization_script(bridge::init_script())`; Tauri
   2.11 has no runtime API to add init scripts to an existing webview, and
   `webview.eval` is blocked by the page's nonce CSP. The main window is
-  created before the setup hook runs, so the window plumbing (D05) owns the
+  created before the setup hook runs, so the window plumbing owns the
   handoff.
 
-## Capability diff review checklist (D04 acceptance)
+## Capability diff review checklist (acceptance)
 
 - [ ] `remote.json` grants **only** `core:event:default`. No window, tray,
       fs, shell, opener, or clipboard permissions.
@@ -60,21 +61,21 @@ Event names allow only alphanumerics, `-`, `/`, `:` and `_` (Tauri
 
 | Event | Payload | Consumer |
 |-------|---------|----------|
-| `key-inject` | `{ "keysym": number, "down": boolean }` | Session client (Win-key injection, D10) |
-| `file-drop` | `{ "paths": string[] }` | Session client drive upload (D11) |
+| `key-inject` | `{ "keysym": number, "down": boolean }` | Session client (Win-key injection) |
+| `file-drop` | `{ "paths": string[] }` | Session client drive upload |
 | `session-command` | `{ "cmd": "fullscreen" \| "close" \| "navigate", "arg"?: string }` | Session client (fullscreen toggle, close, navigate to `arg`) |
-| `desktop-mode` | `{ "on": boolean }` | All pages: with `on: true` the page hides its own V03 tab bar (the shell's tab strip replaces it, D05) |
+| `desktop-mode` | `{ "on": boolean }` | All pages: with `on: true` the page hides its own tab bar (the shell's tab strip replaces it) |
 
-The server's S07 partial binds these four names and dispatches them through
-`window.perseaDesktop.on(name, handler)`.
+The server's desktop bridge partial binds these four names and dispatches
+them through `window.perseaDesktop.on(name, handler)`.
 
 ### Page to shell
 
 | Event | Payload | Shell consumer |
 |-------|---------|----------------|
-| `session-ready` | `{ "session_id": string }` | Session lifecycle (D05): the page has an active session |
-| `drive-browser-open` | (none) | Drive browser (D11) |
-| `session-ended` | `{ "session_id": string }` | Session lifecycle (D05): clean up the session window |
+| `session-ready` | `{ "session_id": string }` | Session lifecycle: the page has an active session |
+| `drive-browser-open` | (none) | Drive browser |
+| `session-ended` | `{ "session_id": string }` | Session lifecycle: clean up the session window |
 
 The shell receives these via `bridge::register`, which buffers them;
 `bridge::drain_page_events()` hands them to the dispatcher. Page code emits
@@ -90,7 +91,7 @@ init script); the call is a silent no-op when `window.__TAURI__` is absent
   origins.
 - `pub fn init_script() -> &'static str`: the document-start page plumbing.
 - `pub fn desktop_bridge_available() -> bool` / `pub fn set_bridge_available(bool)`:
-  gated on the server's `desktop_bridge` capability probe (D02), mirroring
+  gated on the server's `desktop_bridge` capability probe, mirroring
   the server's `init_allow_bridge` pattern. False until set.
 - `pub fn allowed_origins() -> &'static [String]`: the validated origins.
 - Emit helpers (all target the `main` window's webview, all return
@@ -108,8 +109,8 @@ init script); the call is a silent no-op when `window.__TAURI__` is absent
   context"); the page's try/catch swallows it; the shell logs one warning at
   startup.
 - Page not listening: emit is a no-op.
-- `window.__TAURI__` absent (plain browser): the S07 partial and the init
+- `window.__TAURI__` absent (plain browser): the bridge partial and the init
   script both stay inert; page behavior is byte-identical to today.
-- Server without `allow_bridge` (S07 flag off): the page CSP blocks the IPC
+- Server without `allow_bridge` (flag off): the page CSP blocks the IPC
   transport; `window.perseaDesktop` never binds; features degrade to the
   non-bridge path.

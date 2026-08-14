@@ -42,10 +42,10 @@ Re-running the workflow for the same tag re-drafts the release, replaces every a
   - `.AppImage` covers distros that are neither Debian nor RHEL based. Make it executable (`chmod +x`) and run it.
 - **macOS**: two dmgs, one per architecture: arm64 for Apple Silicon, x86_64 for Intel. Minimum system version is 10.15. The app is ad-hoc signed (no Apple certificate), so Gatekeeper complains: right-click the app and choose Open, or run `xattr -dr com.apple.quarantine "/Applications/Persea Desktop.app"` after copying it to Applications.
 
-## Updater and signing (D13)
+## Updater and signing
 
-`uploadUpdaterJson: true` is already set in the workflow. Once the updater plugin and `bundle.createUpdaterArtifacts` land (D13), every release also uploads `latest.json` plus `.sig` signatures signed with the minisign keypair already in the repo secrets, and the stable updater endpoints in `tauri.conf.json` take effect. Beta installers never consume the stable channel; see [beta.md](beta.md).
+`uploadUpdaterJson: true` is already set in the workflow. Once the updater plugin and `bundle.createUpdaterArtifacts` land, every release also uploads `latest.json` plus `.sig` signatures signed with the minisign keypair already in the repo secrets, and the stable updater endpoints in `tauri.conf.json` take effect. Beta installers never consume the stable channel; see [beta.md](beta.md).
 
 ## CI caching
 
-Each build leg uses `rust-cache` scoped to the leg. If release legs approach the runner time limits, the D14 plan calls for sccache (a shared cache across legs) as the next step; tune before the first long release run.
+Each build leg uses `rust-cache` scoped to the leg. If release legs approach the runner time limits, the plan calls for sccache (a shared cache across legs) as the next step; tune before the first long release run.

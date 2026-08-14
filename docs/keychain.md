@@ -1,6 +1,6 @@
 # Keychain
 
-The desktop shell stores the paired API token (D07) and optional saved
+The desktop shell stores the paired API token and optional saved
 credentials through the OS keychain. There is no official Tauri plugin
 for this, so Persea Desktop ships a custom Rust command module
 (`src-tauri/src/keyring.rs`) over the keyring v4 ecosystem
@@ -19,11 +19,11 @@ them (see [Security](#security)).
 | `keyring_tier` | `()` | `{ tier, notice }`; `notice` is set only for fallback tiers |
 
 Namespacing: every credential lives under the app service
-`dev.persea.desktop`; the `user` is caller-supplied and D07 uses
-`<instance url> + device token id`. The commands accept `service` and
-`user` as parameters so future features can use separate namespaces
-without an API change, but the shell should pass `dev.persea.desktop`
-for the service.
+`dev.persea.desktop`; the `user` is caller-supplied and the pairing
+flow uses `<instance url> + device token id`. The commands accept
+`service` and `user` as parameters so future features can use separate
+namespaces without an API change, but the shell should pass
+`dev.persea.desktop` for the service.
 
 ## Store matrix
 
@@ -53,7 +53,7 @@ credential) succeed:
    `<app data dir>/keyring-key`, both files `0600`, directory `0700`.
    The key cannot be derived from the pairing token (the pairing token
    is what this store protects, so deriving from it would be circular)
-   and no passphrase prompt exists in the D06 shell scope, so the
+   and no passphrase prompt exists in the shell scope, so the
    decision is a random per-install key. This protects against casual
    file reads by other local users, not against an attacker with the
    same account.
@@ -87,7 +87,7 @@ The shell calls `keyring_tier` and shows `notice` when it is set:
   rejects any invocation without a matching ACL entry, and separately
   rejects every custom command invoked from a remote origin even without
   the manifest. The keyring commands are thus unreachable from a persea
-  server page (defense in depth on top of D04's origin scoping).
+  server page (defense in depth on top of the bridge's origin scoping).
 - **No main-thread keyring calls.** All four commands run their keyring
   work inside `spawn_blocking`. The zbus Secret Service backend must
   never touch the main thread: its blocking connection deadlocks against

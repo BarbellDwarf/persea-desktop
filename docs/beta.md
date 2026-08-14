@@ -22,7 +22,7 @@ Beta builds are versioned `X.Y.Z-beta.<run number>` (for example `1.2.0-beta.42`
 2. Open the `beta` pre-release from the release page once the run finishes.
 3. Download the installer for your OS (same matrix as the stable release) and install it.
 
-While the updater is not yet wired (D13), each beta must be installed manually from the pre-release. After D13, beta installs update automatically from the beta channel.
+While the updater is not yet wired, each beta must be installed manually from the pre-release. Once the updater ships, beta installs update automatically from the beta channel.
 
 ## Channel semantics
 
@@ -31,6 +31,6 @@ While the updater is not yet wired (D13), each beta must be installed manually f
 - Leaving the beta channel means installing the stable installer, which then updates from stable. There is no automatic channel switch in v1.2.0.
 - Because the `beta` tag is deleted and recreated on every run, the beta release's asset URLs are only valid between runs. The previous `latest.json` disappears with the previous release.
 
-## Updater endpoints (D13)
+## Updater endpoints
 
-The beta workflow passes the beta endpoint as a build-time `--config` override. The stable endpoints live in `tauri.conf.json`. Both are inert until the updater plugin and `bundle.createUpdaterArtifacts` land (D13); the same minisign keypair signs both channels.
+The beta workflow passes the beta endpoint as a build-time `--config` override. The stable endpoints live in `tauri.conf.json`. Both are inert until the updater plugin and `bundle.createUpdaterArtifacts` land; the same minisign keypair signs both channels.
