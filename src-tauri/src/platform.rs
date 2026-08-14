@@ -163,7 +163,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         Some("CmdOrCtrl+N"),
     )?;
     let close_tab = MenuItem::with_id(app, ID_CLOSE_TAB, "Close Tab", true, Some("CmdOrCtrl+W"))?;
-    let file = Submenu::with_id(app, "File", true)?;
+    let file = Submenu::with_id(app, "File", "File", true)?;
     file.append_items(&[&new_session, &close_tab])?;
     #[cfg(not(target_os = "macos"))]
     {
@@ -183,7 +183,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         }
     }
 
-    let edit = Submenu::with_id(app, "Edit", true)?;
+    let edit = Submenu::with_id(app, "Edit", "Edit", true)?;
     #[cfg(target_os = "linux")]
     {
         // Undo/redo predefined items are unsupported on GTK; the
@@ -221,7 +221,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         Some(fullscreen_accel),
     )?;
     let toggle_tabs = MenuItem::with_id(app, ID_TOGGLE_TABS, "Toggle Tabs", true, None::<&str>)?;
-    let view = Submenu::with_id(app, "View", true)?;
+    let view = Submenu::with_id(app, "View", "View", true)?;
     view.append_items(&[&fullscreen, &toggle_tabs])?;
 
     let docs = MenuItem::with_id(app, ID_DOCS, "Docs", true, None::<&str>)?;
@@ -234,7 +234,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
             ..Default::default()
         }),
     )?;
-    let help = Submenu::with_id(app, "Help", true)?;
+    let help = Submenu::with_id(app, "Help", "Help", true)?;
     help.append_items(&[&docs, &about])?;
 
     let mut items: Vec<&dyn IsMenuItem<tauri::Wry>> = Vec::new();
@@ -253,7 +253,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         )?;
         let sep = PredefinedMenuItem::separator(app)?;
         let quit = PredefinedMenuItem::quit(app, None)?;
-        let app_menu = Submenu::with_id(app, "Persea Desktop", true)?;
+        let app_menu = Submenu::with_id(app, "Persea Desktop", "Persea Desktop", true)?;
         app_menu.append_items(&[&about, &sep, &quit])?;
         items.push(&app_menu);
     }
