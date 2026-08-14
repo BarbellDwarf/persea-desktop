@@ -60,7 +60,7 @@
 
 #![allow(dead_code)] // consumed by the lib.rs wiring (dispatcher)
 
-use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::Manager;
 
 const ID_NEW_SESSION: &str = "menu-new-session";
