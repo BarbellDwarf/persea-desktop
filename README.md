@@ -109,10 +109,10 @@ and CI.
 ## Support
 
 Persea Desktop is part of the persea project, funded by its community.
-If the app saves you time, consider sponsoring the project on
-[Open Collective](https://opencollective.com/persea): contributions
-pay for CI infrastructure, cross-platform build and signing
-certificates, test machines, and development time.
+If the app saves you time, consider supporting the project on
+[Ko-Fi](https://ko-fi.com/barbelldwarf): contributions pay for CI
+infrastructure, cross-platform build and signing certificates, test
+machines, and development time.
 
 ## License
 
