@@ -155,8 +155,13 @@ pub fn setup_menu(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>
 }
 
 fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
-    let new_session =
-        MenuItem::with_id(app, ID_NEW_SESSION, "New Session", true, Some("CmdOrCtrl+N"))?;
+    let new_session = MenuItem::with_id(
+        app,
+        ID_NEW_SESSION,
+        "New Session",
+        true,
+        Some("CmdOrCtrl+N"),
+    )?;
     let close_tab = MenuItem::with_id(app, ID_CLOSE_TAB, "Close Tab", true, Some("CmdOrCtrl+W"))?;
 
     let mut file_items: Vec<&dyn IsMenuItem<tauri::Wry>> = vec![&new_session, &close_tab];
@@ -211,8 +216,13 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
     } else {
         "F11"
     };
-    let fullscreen =
-        MenuItem::with_id(app, ID_FULLSCREEN, "Fullscreen", true, Some(fullscreen_accel))?;
+    let fullscreen = MenuItem::with_id(
+        app,
+        ID_FULLSCREEN,
+        "Fullscreen",
+        true,
+        Some(fullscreen_accel),
+    )?;
     let toggle_tabs = MenuItem::with_id(app, ID_TOGGLE_TABS, "Toggle Tabs", true, None::<&str>)?;
     let view = Submenu::with_items(app, "View", true, &[&fullscreen, &toggle_tabs])?;
 
