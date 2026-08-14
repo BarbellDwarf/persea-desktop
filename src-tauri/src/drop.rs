@@ -81,7 +81,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     .resizable(false);
     #[cfg(not(target_os = "macos"))]
     let overlay = overlay.transparent(true);
-    let overlay = overlay.build()?;
+    overlay.build()?;
     // Deliberately no `set_ignore_cursor_events(true)` here: on Linux the
     // request crosses into the GTK main loop before the hidden window is
     // realized and aborts the app (tao#1178). The flag is applied in
