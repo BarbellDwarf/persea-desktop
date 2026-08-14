@@ -82,7 +82,11 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(target_os = "macos"))]
     let overlay = overlay.transparent(true);
     let overlay = overlay.build()?;
-    let _ = overlay.set_ignore_cursor_events(true);
+    // Deliberately no `set_ignore_cursor_events(true)` here: on Linux the
+    // request crosses into the GTK main loop before the hidden window is
+    // realized and aborts the app (tao#1178). The flag is applied in
+    // `position_overlay` right after the window is shown, when the
+    // GdkWindow exists.
 
     let handle = app.handle().clone();
     refresh_attachments(&handle);
@@ -250,6 +254,9 @@ fn position_overlay(win: &WebviewWindow, position: PhysicalPosition<f64>) {
         let _ = overlay.set_position(PhysicalPosition::new(x, y));
         if !overlay.is_visible().unwrap_or(false) {
             let _ = overlay.show();
+            // Window is realized now; safe to ignore cursor events (see
+            // the setup comment about tao#1178).
+            let _ = overlay.set_ignore_cursor_events(true);
         }
     });
 }
