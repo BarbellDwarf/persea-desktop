@@ -142,6 +142,7 @@ pub fn apply_gpu_env() {
 /// window is created, so it applies at startup and to windows created
 /// after a runtime toggle. macOS: wry/tauri expose no certificate-bypass
 /// API, so the system trust store is the only path there.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 pub fn apply_insecure_tls_policy(app: &tauri::AppHandle) {
     #[cfg(target_os = "linux")]
     {
