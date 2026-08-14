@@ -23,6 +23,7 @@ async function main() {
     } catch (err) {
       failed += 1;
       console.error(`FAIL ${spec}: ${err.message}`);
+      console.error(err.stack);
     }
   }
   await stopDriver();

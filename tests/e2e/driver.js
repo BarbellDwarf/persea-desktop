@@ -78,4 +78,21 @@ function screenshot(driver, name) {
   });
 }
 
-module.exports = { startDriver, stopDriver, newSession, screenshot };
+// Pre-seed the shell's instance store before the app launches. The
+// navigation lockdown only allows origins present in the store.
+function seedInstances(instances) {
+  const { homedir } = require("os");
+  const { join } = require("path");
+  const configDir = process.platform === "win32"
+    ? join(process.env.APPDATA, "dev.persea.desktop", "config")
+    : process.platform === "darwin"
+      ? join(homedir(), "Library", "Application Support", "dev.persea.desktop", "config")
+      : join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "dev.persea.desktop");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(
+    join(configDir, "instances.json"),
+    JSON.stringify({ instances, lastUsed: instances.find((i) => i.default)?.url || null }),
+  );
+}
+
+module.exports = { startDriver, stopDriver, newSession, screenshot, seedInstances };

@@ -1,7 +1,7 @@
 // Shell UI specs: the local settings/pairing/welcome pages in the Tauri app.
 // These exercise the shell's own UI (instances CRUD, appearance, shortcuts,
 // pairing states) through the real app binary.
-const { newSession, screenshot } = require("../driver");
+const { newSession, screenshot, seedInstances } = require("../driver");
 
 const BASE = process.env.PERSEA_E2E_BASE_URL;
 
@@ -11,12 +11,13 @@ async function waitForText(driver, text, timeoutMs = 8000) {
 }
 
 module.exports = async function () {
+  seedInstances([]);
   const driver = await newSession();
 
   try {
     // First-run: no instances configured -> the welcome page shows.
     await driver.get(`tauri://localhost/index.html`);
-    await waitForText(driver, "Add your first instance");
+    await waitForText(driver, "Add your first server");
     await screenshot(driver, "shell-welcome");
 
     // The welcome flow opens the settings page for the guided add.
