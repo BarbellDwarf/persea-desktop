@@ -272,6 +272,7 @@ fn position_overlay(win: &WebviewWindow, position: PhysicalPosition<f64>) {
 /// so poll briefly for the GdkWindow before sending the request.
 /// Best-effort: when the polls run out the overlay keeps capturing
 /// cursor events, and Wayland drops still resolve via LAST_TARGET.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 fn apply_ignore_cursor_events(overlay: &WebviewWindow, app: &AppHandle, retries: u32) {
     #[cfg(target_os = "linux")]
     {
