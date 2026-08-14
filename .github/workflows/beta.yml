@@ -148,17 +148,25 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing: the private minisign key lives ONLY in the
+          # repo secrets; the public key is committed in tauri.conf.json
+          # (the beta --config override below replaces the endpoints and
+          # keeps the pubkey).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.prepare.outputs.release_id }}
           tagName: beta
           releaseDraft: true
           prerelease: true
+          # createUpdaterArtifacts is on in tauri.conf.json; the action
+          # uploads latest.json plus every .sig to the pre-release.
           uploadUpdaterJson: true
           # Beta builds carry X.Y.Z-beta.<run> and point the updater at
           # the beta release's latest.json. The stable endpoints live in
-          # tauri.conf.json (D13); this override is inert until the
-          # updater plugin lands, then beta installers update from the
-          # beta channel and stable installers never see beta.
+          # tauri.conf.json; this override replaces them for the beta
+          # channel, so beta installers update from beta and stable
+          # installers never see a beta build.
           args: >-
             ${{ matrix.args }}
             --config '{"version":"${{ needs.prepare.outputs.beta_version }}","plugins":{"updater":{"endpoints":["https://github.com/persea-grove/persea-desktop/releases/download/beta/latest.json"]}}}'

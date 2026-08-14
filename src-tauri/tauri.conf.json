@@ -16,6 +16,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -52,6 +53,14 @@
       "rpm": {
         "depends": ["webkit2gtk4.1"]
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/persea-grove/persea-desktop/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM2RjYwRjNCQzM0MUZGQkMKUldTOC8wSERPdy8yeGd2ZXBIeGgveFVhSThHYU5QN3RwbmtQR21aZElncjg5WUR5bW1hN2xTOGsK"
     }
   }
 }

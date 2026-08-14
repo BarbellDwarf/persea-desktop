@@ -22,7 +22,7 @@ Beta builds are versioned `X.Y.Z-beta.<run number>` (for example `1.2.0-beta.42`
 2. Open the `beta` pre-release from the release page once the run finishes.
 3. Download the installer for your OS (same matrix as the stable release) and install it.
 
-While the updater is not yet wired, each beta must be installed manually from the pre-release. Once the updater ships, beta installs update automatically from the beta channel.
+While the updater is wired, beta installs update automatically from the beta channel: install the first beta manually, and every following beta lands through the updater.
 
 ## Channel semantics
 
@@ -33,4 +33,4 @@ While the updater is not yet wired, each beta must be installed manually from th
 
 ## Updater endpoints
 
-The beta workflow passes the beta endpoint as a build-time `--config` override. The stable endpoints live in `tauri.conf.json`. Both are inert until the updater plugin and `bundle.createUpdaterArtifacts` land; the same minisign keypair signs both channels.
+The beta workflow passes the beta endpoint as a build-time `--config` override. The stable endpoints live in `tauri.conf.json`. Both channels are signed with the same minisign keypair: the public key is committed in `tauri.conf.json` (`plugins.updater.pubkey`), the private key lives only in the `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets; see [release.md](release.md) for key management and rotation.

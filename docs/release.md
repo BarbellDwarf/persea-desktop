@@ -28,7 +28,7 @@ The publish step runs after all four legs, so a release missing a platform leg c
    git push origin v1.2.0
    ```
 
-4. Watch the `Release` run in Actions. When it finishes, the release page has all six artifacts: two Windows installers, three Linux packages and two macOS dmgs.
+4. Watch the `Release` run in Actions. When it finishes, the release page has all six installers (two Windows, three Linux, two macOS dmgs) plus the updater files: a `latest.json` and one `.sig` signature per updater package.
 5. The release notes are auto-generated from merged PRs. Edit the notes after publishing if needed; releases stay editable.
 
 Re-running the workflow for the same tag re-drafts the release, replaces every asset and publishes again.
@@ -44,7 +44,18 @@ Re-running the workflow for the same tag re-drafts the release, replaces every a
 
 ## Updater and signing
 
-`uploadUpdaterJson: true` is already set in the workflow. Once the updater plugin and `bundle.createUpdaterArtifacts` land, every release also uploads `latest.json` plus `.sig` signatures signed with the minisign keypair already in the repo secrets, and the stable updater endpoints in `tauri.conf.json` take effect. Beta installers never consume the stable channel; see [beta.md](beta.md).
+The app updates itself from the release's `latest.json` asset. It checks on startup, every 4 hours and on the manual "Check for updates" action in Settings, and offers a Download & restart flow once a newer version is found. The update installs in place: it restarts the app on Windows (NSIS/MSI) and AppImage, swaps the bundle in place on macOS, and re-installs through the package manager on deb/rpm (where a restart comes later). Update check failures are silent and never block the app.
+
+`bundle.createUpdaterArtifacts` is on in `tauri.conf.json`, so every release also carries the updater artifacts. The workflow injects the signing keys and the tauri-action uploads `latest.json` and every `.sig` alongside the installers.
+
+Key management:
+
+- The minisign keypair was generated once with `npx @tauri-apps/cli signer generate`. The PUBLIC key is committed in `tauri.conf.json` under `plugins.updater.pubkey` and is shared by the stable and beta channels.
+- The PRIVATE key exists only as the `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets. It must never be committed or written into any file in the repo.
+- Losing the private key or its password bricks updates: existing installs can never verify a signature again, so they stop updating. Keep a backup of the keypair outside the repo.
+- To rotate the keypair: regenerate it, commit the new public key in `tauri.conf.json`, update the two secrets, then cut a release. Installations adopt the new public key with the release they install from it.
+
+Beta installers never consume the stable channel; see [beta.md](beta.md).
 
 ## CI caching
 

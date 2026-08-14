@@ -38,12 +38,30 @@
 //! macOS threading: AppKit notifications must be posted from the main
 //! thread, so the macOS path hops through `run_on_main_thread`; Linux
 //! (D-Bus) and Windows (WinRT) are posted from the calling thread.
+//!
+//! Auto-update wiring: this module owns the update check loop and the
+//! update notifications. The updater plugin is registered by the
+//! dispatcher; [`updater_plugin`] (also registered there) spawns the
+//! background loop from its setup hook, so no call in the app setup
+//! hook is needed. The loop checks on startup and every 4 hours and
+//! toasts once per available version; the settings Updates section
+//! calls the two commands (`cmd_updater_check`, manual check, and
+//! `cmd_updater_download_and_restart`, the Download & restart flow).
+//! Check failures are logged and silent; the download-and-restart flow
+//! toasts when the download is ready right before the install step,
+//! which restarts the app on Windows (NSIS/MSI) and AppImage, swaps the
+//! bundle in place on macOS, and re-installs through the package
+//! manager on deb/rpm.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
+use tauri_plugin_updater::UpdaterExt;
+
+use crate::http;
 
 /// App id used for Windows toast AUMID matching; ignored elsewhere.
 #[cfg(all(target_os = "windows", not(test)))]
@@ -265,16 +283,142 @@ pub fn transfer_complete(app: &AppHandle, name: &str) {
     );
 }
 
-/// Update-available placeholder (auto-update, D13): the hook the updater
-/// calls when a new version is ready.
-#[allow(dead_code)] // wired by the updater (D13); placeholder until then
+/// An update is available. Fired by the background check loop and the
+/// manual check command, once per version: a lingering update never
+/// re-toasts on every check.
 pub fn update_available(app: &AppHandle, version: &str) {
     notify(
         app,
         "Update available",
+        &format!("Persea Desktop {version} is available."),
+        None,
+    );
+}
+
+/// The update finished downloading and is ready to install. Fired by
+/// the download-and-restart flow right before the install step.
+pub fn update_downloaded(app: &AppHandle, version: &str) {
+    notify(
+        app,
+        "Update downloaded",
         &format!("Persea Desktop {version} is ready to install."),
         None,
     );
+}
+
+// ---------------------------------------------------------------------------
+// Auto-update: background check loop and the settings Updates commands
+// ---------------------------------------------------------------------------
+
+/// Check cadence for the background loop (locked design: startup plus
+/// every 4 hours).
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(4 * 60 * 60);
+
+/// The last version announced, so an update that lingers on the server
+/// notifies exactly once.
+static NOTIFIED_VERSION: Mutex<Option<String>> = Mutex::new(None);
+
+/// Auto-update plugin, registered by the dispatcher in the plugin
+/// chain. Its setup hook spawns the background check loop (startup plus
+/// every 4 hours), so the updater wiring needs no call in the app setup
+/// hook. The plugin also registers the manual check and
+/// download-and-restart commands that back the settings Updates
+/// section.
+pub fn updater_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    tauri::plugin::Builder::new("persea-updater")
+        .setup(|app, _| {
+            let handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                background_check_loop(handle).await;
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            cmd_updater_check,
+            cmd_updater_download_and_restart
+        ])
+        .build()
+}
+
+async fn background_check_loop(app: AppHandle) {
+    loop {
+        match check_available(&app).await {
+            Ok(Some(version)) => announce_available(&app, &version),
+            Ok(None) => {}
+            Err(e) => eprintln!("persea-desktop: update check failed: {e}"),
+        }
+        http::sleep(UPDATE_CHECK_INTERVAL).await;
+    }
+}
+
+/// One check against the configured endpoints. Returns the available
+/// version, or None when up to date.
+async fn check_available(app: &AppHandle) -> Result<Option<String>, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    Ok(updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|u| u.version))
+}
+
+/// Announce an available version once (per version). Returns whether a
+/// toast was sent.
+fn announce_available(app: &AppHandle, version: &str) -> bool {
+    let mut announced = NOTIFIED_VERSION.lock().unwrap();
+    if announced.as_deref() == Some(version) {
+        return false;
+    }
+    *announced = Some(version.to_string());
+    update_available(app, version);
+    true
+}
+
+/// Manual "Check for updates" for the settings Updates section. Returns
+/// the available version, or None when up to date. Failures surface as
+/// the settings-page note; nothing here is fatal.
+#[tauri::command]
+pub async fn cmd_updater_check(app: AppHandle) -> Result<Option<String>, String> {
+    match check_available(&app).await {
+        Ok(version) => {
+            if let Some(ref v) = version {
+                announce_available(&app, v);
+            }
+            Ok(version)
+        }
+        Err(e) => {
+            eprintln!("persea-desktop: update check failed: {e}");
+            Err(e)
+        }
+    }
+}
+
+/// The settings "Download & restart" action: downloads the update,
+/// announces that it is ready, and installs it. The install step
+/// restarts the app on Windows (NSIS/MSI) and AppImage, swaps the
+/// bundle in place on macOS, and re-installs through the package
+/// manager on deb/rpm; the platforms that stay running leave the
+/// restart to the user.
+#[tauri::command]
+pub async fn cmd_updater_download_and_restart(app: AppHandle) -> Result<(), String> {
+    let result = download_and_install(&app).await;
+    if let Err(ref e) = result {
+        eprintln!("persea-desktop: update install failed: {e}");
+    }
+    result
+}
+
+async fn download_and_install(app: &AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
+        return Err("no update available".to_string());
+    };
+    let bytes = update
+        .download(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    update_downloaded(app, &update.version);
+    update.install(bytes).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
