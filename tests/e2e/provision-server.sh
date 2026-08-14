@@ -58,6 +58,21 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
+echo "[provision] completing first-run setup (admin user)..."
+ADMIN_PASSWORD="${PERSEA_E2E_ADMIN_PASSWORD:-e2e-admin-password-12345}"
+SETUP_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1:$PORT/setup" \
+  --data-urlencode "listen_addr=127.0.0.1:$PORT" \
+  --data-urlencode "db_path=$DB" \
+  --data-urlencode "db_url=" \
+  --data-urlencode "guacd_mode=external" \
+  --data-urlencode "guacd_addr=127.0.0.1:4822" \
+  --data-urlencode "guacd_path=" \
+  --data-urlencode "admin_email=e2e-admin" \
+  --data-urlencode "admin_name=E2E Admin" \
+  --data-urlencode "admin_password=$ADMIN_PASSWORD")
+[ "$SETUP_HTTP" = "200" ] || [ "$SETUP_HTTP" = "302" ] || [ "$SETUP_HTTP" = "303" ] \
+  || { echo "setup POST failed (HTTP $SETUP_HTTP)" >&2; exit 1; }
+
 echo "PERSEA_E2E_BASE_URL=http://127.0.0.1:$PORT"
 echo "PERSEA_E2E_API_KEY=$KEY"
 echo "PERSEA_E2E_PID=$(cat "$WORK/persea.pid")"
