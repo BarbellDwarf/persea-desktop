@@ -69,6 +69,13 @@ jobs:
         working-directory: tests/e2e
         run: npm install
 
+      - name: Install a version-matched Edge WebDriver (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          $PWD.Path >> $env:GITHUB_PATH
+
       - name: Run the E2E specs (Linux)
         if: runner.os == 'Linux'
         working-directory: tests/e2e
