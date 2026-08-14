@@ -28,6 +28,12 @@ pub struct ShellConfigFile {
     /// platform GPU wiring in `platform.rs` and `windows.rs`.
     #[serde(default, rename = "gpuAcceleration")]
     pub gpu_acceleration: Option<bool>,
+    /// The "Allow untrusted TLS certificates" toggle: skips certificate
+    /// validation in the probe and the webviews (Linux web-context
+    /// policy, WebView2 launch arg on Windows). Off by default; only
+    /// meant for self-signed / private-CA servers the operator trusts.
+    #[serde(default, rename = "allowInsecureTls")]
+    pub allow_insecure_tls: bool,
 }
 
 fn default_appearance() -> String {
@@ -39,6 +45,7 @@ impl Default for ShellConfigFile {
         Self {
             appearance: default_appearance(),
             gpu_acceleration: None,
+            allow_insecure_tls: false,
         }
     }
 }
@@ -103,6 +110,10 @@ impl ShellConfig {
     pub fn set_gpu_acceleration(&mut self, enabled: bool) {
         self.file.gpu_acceleration = Some(enabled);
     }
+
+    pub fn set_allow_insecure_tls(&mut self, enabled: bool) {
+        self.file.allow_insecure_tls = enabled;
+    }
 }
 
 /// Initialize the process global. Called by the dispatcher from the
@@ -136,6 +147,10 @@ pub fn gpu_acceleration() -> Option<bool> {
     with_config(|c| c.file.gpu_acceleration).flatten()
 }
 
+pub fn allow_insecure_tls() -> bool {
+    with_config(|c| c.file.allow_insecure_tls).unwrap_or(false)
+}
+
 fn shell_unavailable() -> String {
     "shell config is not initialized".to_string()
 }
@@ -164,6 +179,26 @@ pub fn cmd_shell_set_gpu_acceleration(enabled: bool) -> Result<ShellConfigFile, 
         Ok(c.file.clone())
     })
     .ok_or_else(shell_unavailable)?
+}
+
+/// Flip the "Allow untrusted TLS certificates" toggle. Persists the
+/// setting, then applies the platform web-engine policy immediately
+/// (Linux web-context policy; WebView2 takes the flag from the launch
+/// args on the next window creation).
+#[tauri::command]
+#[allow(dead_code)] // registered by the dispatcher wiring (invoke_handler)
+pub fn cmd_shell_set_insecure_tls(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<ShellConfigFile, String> {
+    let result = with_config(|c| {
+        c.set_allow_insecure_tls(enabled);
+        c.save()?;
+        Ok(c.file.clone())
+    })
+    .ok_or_else(shell_unavailable)?;
+    crate::platform::apply_insecure_tls_policy(&app);
+    result
 }
 
 /// App version for the About section, from Cargo at build time.
@@ -222,6 +257,22 @@ mod tests {
         cfg.save().unwrap();
         let loaded = ShellConfig::load(&path);
         assert_eq!(loaded.file.gpu_acceleration, Some(false));
+    }
+
+    #[test]
+    fn insecure_tls_round_trip_and_legacy_default() {
+        let legacy = tmp_path("legacytls");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::write(&legacy, r#"{"appearance":"auto"}"#).unwrap();
+        let mut cfg = ShellConfig::load(&legacy);
+        assert!(!cfg.file.allow_insecure_tls);
+        cfg.set_allow_insecure_tls(true);
+        cfg.save().unwrap();
+        let loaded = ShellConfig::load(&legacy);
+        assert!(loaded.file.allow_insecure_tls);
+        cfg.set_allow_insecure_tls(false);
+        cfg.save().unwrap();
+        assert!(!ShellConfig::load(&legacy).file.allow_insecure_tls);
     }
 
     #[test]

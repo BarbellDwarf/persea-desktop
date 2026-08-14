@@ -106,8 +106,8 @@ pub fn run() {
                 // DevToolsActivePort file when remote debugging is in the
                 // environment's browser args.
                 builder = builder.additional_browser_args("--remote-debugging-port=0");
-            } else if let Some(args) = platform::webview2_gpu_args() {
-                builder = builder.additional_browser_args(args);
+            } else if let Some(args) = platform::webview2_browser_args() {
+                builder = builder.additional_browser_args(&args);
             }
             if kiosk::is_active() {
                 builder = builder.devtools(false);
@@ -132,6 +132,12 @@ pub fn run() {
                     }
                 });
             }
+
+            // Apply the persisted untrusted-TLS policy to the shared
+            // WebKitGTK web context now that the first webview exists
+            // (no-op elsewhere; Windows reads the flag from the launch
+            // args at window creation).
+            platform::apply_insecure_tls_policy(app.handle());
 
             // Bridge: validate the runtime instance origins against the
             // baked remote-URL allowlist (fail closed), install the
@@ -184,6 +190,7 @@ pub fn run() {
             shell_config::cmd_shell_get_settings,
             shell_config::cmd_shell_set_appearance,
             shell_config::cmd_shell_set_gpu_acceleration,
+            shell_config::cmd_shell_set_insecure_tls,
             shell_config::cmd_app_version,
             keyring::keyring_set,
             keyring::keyring_get,

@@ -43,13 +43,18 @@ Launch Persea Desktop. The first window shows the welcome page with an
 
 The server must present a TLS certificate this system trusts. A public
 certificate (Let's Encrypt, a commercial CA) works out of the box. For
-a private CA, install the CA certificate into the operating system's
-trust store (on Linux, copy it to `/usr/local/share/ca-certificates/`
-and run `sudo update-ca-certificates`) before adding the server; both
-the probe and the webview then accept it. If the certificate is not
-trusted, the add form reports `Unreachable — the server's TLS
-certificate is not trusted by this system`, and opening the server
-shows the browser-style certificate error page.
+a private CA, either install the CA certificate into the operating
+system's trust store (on Linux, copy it to
+`/usr/local/share/ca-certificates/` and run
+`sudo update-ca-certificates`), or enable Settings → Network →
+**Allow untrusted TLS certificates**, which skips certificate
+validation for the probe and the webviews entirely (Linux applies it
+immediately; Windows after the next launch; macOS is not supported and
+still needs the system trust store). Only use the toggle for servers
+you control, since it disables validation for every connection. If the
+certificate is not trusted, the add form reports `Unreachable — the
+server's TLS certificate is not trusted by this system`, and opening
+the server shows the browser-style certificate error page.
 
 You can add more servers any time in Settings → Instances. Each server
 keeps its own login, sessions and data store, so signing in to one

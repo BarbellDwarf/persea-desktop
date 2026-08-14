@@ -59,6 +59,29 @@
       <p class="section-desc">On by default. The change applies after the next launch.</p>
     </section>
 
+    <section class="settings-section" id="sec-network" aria-labelledby="sec-network-title">
+      <h2 id="sec-network-title">Network</h2>
+      <p class="section-desc">
+        Allow servers whose TLS certificate is not trusted by this
+        system: self-signed certificates and private CAs you have not
+        installed in the OS trust store. Certificate validation is
+        skipped for every connection while this is on, so only enable
+        it for servers you control.
+      </p>
+      <label class="toggle-row">
+        <span class="toggle-label">Allow untrusted TLS certificates</span>
+        <div class="toggle-switch">
+          <input type="checkbox" id="insecure-tls-enabled">
+          <span class="toggle-slider"></span>
+        </div>
+      </label>
+      <p class="section-desc">
+        Off by default. Takes effect immediately on Linux; on Windows
+        after the next launch. Not available on macOS, where the server
+        certificate must be trusted by the system.
+      </p>
+    </section>
+
     <section class="settings-section" id="sec-shortcuts" aria-labelledby="sec-shortcuts-title">
       <h2 id="sec-shortcuts-title">Shortcuts</h2>
       <p class="section-desc">

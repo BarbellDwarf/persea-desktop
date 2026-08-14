@@ -592,6 +592,7 @@ pub async fn probe_server(base_url: &str) -> CachedProbe {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(PROBE_TIMEOUT_SECS))
         .user_agent(concat!("persea-desktop/", env!("CARGO_PKG_VERSION")))
+        .danger_accept_invalid_certs(crate::shell_config::allow_insecure_tls())
         .build()
     {
         Ok(c) => c,

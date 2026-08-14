@@ -67,6 +67,7 @@
     "allow-cmd-shell-get-settings",
     "allow-cmd-shell-set-appearance",
     "allow-cmd-shell-set-gpu-acceleration",
+    "allow-cmd-shell-set-insecure-tls",
     "allow-cmd-app-version",
     "allow-cmd-hotkeys-get-settings",
     "allow-cmd-hotkeys-set-shortcut",

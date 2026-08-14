@@ -87,20 +87,27 @@ pub fn gpu_override() -> Option<bool> {
     crate::shell_config::gpu_acceleration()
 }
 
-/// WebView2 additional browser arguments driven by the toggle.
-///
-/// `Some(...)` only when the toggle is OFF: `--disable-gpu` on top of
-/// wry's default feature disables (WebView2 replaces the defaults
-/// wholesale when any additional argument is set, so the string carries
-/// both). `None` means "no arguments, engine defaults", which keeps
-/// acceleration on. Windows-only in effect; the builder method is a
-/// no-op elsewhere. `windows.rs` applies it to the strip and session
-/// windows; the main-window builder in `lib.rs` uses it the same way.
-pub fn webview2_gpu_args() -> Option<&'static str> {
+/// WebView2 additional browser arguments driven by the toggles:
+/// GPU fallback args when the "Hardware acceleration" toggle is OFF
+/// (WebView2 replaces the defaults wholesale when any additional
+/// argument is set, so the string carries both), plus
+/// `--ignore-certificate-errors` when "Allow untrusted TLS
+/// certificates" is ON. `None` means "no arguments, engine defaults".
+/// Windows-only in effect; the builder method is a no-op elsewhere.
+/// `windows.rs` applies it to the strip and session windows; the
+/// main-window builder in `lib.rs` uses it the same way.
+pub fn webview2_browser_args() -> Option<String> {
+    let mut parts = Vec::new();
     if gpu_override() == Some(false) {
-        Some("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu")
-    } else {
+        parts.push("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu");
+    }
+    if crate::shell_config::allow_insecure_tls() {
+        parts.push("--ignore-certificate-errors");
+    }
+    if parts.is_empty() {
         None
+    } else {
+        Some(parts.join(" "))
     }
 }
 
@@ -126,6 +133,39 @@ pub fn apply_gpu_env() {
 // ---------------------------------------------------------------------------
 // App menu bar
 // ---------------------------------------------------------------------------
+
+/// Apply the "Allow untrusted TLS certificates" toggle to the web
+/// engines. Linux: every webview shares one WebKitGTK web context, so
+/// flipping its TLS errors policy to IGNORE covers the whole app and
+/// takes effect immediately. Windows: the flag rides in the WebView2
+/// launch args ([`webview2_browser_args`]), which are read when a
+/// window is created, so it applies at startup and to windows created
+/// after a runtime toggle. macOS: wry/tauri expose no certificate-bypass
+/// API, so the system trust store is the only path there.
+pub fn apply_insecure_tls_policy(app: &tauri::AppHandle) {
+    if !crate::shell_config::allow_insecure_tls() {
+        return;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use tauri::Manager;
+        use webkit2gtk::{WebContextExt, WebViewExt};
+        if let Some(win) = app.get_webview_window(crate::windows::MAIN_WINDOW_LABEL) {
+            let _ = win.with_webview(|platform| {
+                if let Some(context) = platform.inner().context() {
+                    // Deprecated since WebKitGTK 2.32 in favor of
+                    // per-host allow_tls_certificate_for_host, which
+                    // needs the server's certificate object; the probe
+                    // (reqwest) cannot hand it over without a raw TLS
+                    // handshake, and the toggle is app-global anyway,
+                    // so the context-wide policy is the right fit.
+                    #[allow(deprecated)]
+                    context.set_tls_errors_policy(webkit2gtk::TLSErrorsPolicy::Ignore);
+                }
+            });
+        }
+    }
+}
 
 /// Build and attach the standard app menu. Call from the setup hook
 /// AFTER `windows::setup` (the main window must exist; the tab manager

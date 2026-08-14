@@ -50,6 +50,7 @@ fn main() {
             "cmd_shell_get_settings",
             "cmd_shell_set_appearance",
             "cmd_shell_set_gpu_acceleration",
+            "cmd_shell_set_insecure_tls",
             "cmd_app_version",
             "cmd_hotkeys_get_settings",
             "cmd_hotkeys_set_shortcut",

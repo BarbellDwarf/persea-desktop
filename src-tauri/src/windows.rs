@@ -1294,8 +1294,8 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     .skip_taskbar(true)
     .resizable(false)
     .always_on_top(true);
-    if let Some(args) = gpu_browser_args() {
-        builder = builder.additional_browser_args(args);
+    if let Some(args) = browser_args() {
+        builder = builder.additional_browser_args(&args);
     }
     let strip = builder.build()?;
     let dock_tx = tx.clone();
@@ -1595,20 +1595,12 @@ fn execute_effects(app: &tauri::AppHandle, effects: Vec<Effect>) {
     });
 }
 
-/// WebView2 additional browser arguments for the persisted "Hardware
-/// acceleration" toggle: `--disable-gpu` (plus wry's default feature
-/// disables, which WebView2 replaces wholesale when any additional
-/// argument is set) when the toggle is OFF, nothing otherwise, which
-/// keeps acceleration on engine defaults. Windows-only in effect; the
-/// builder method is a no-op elsewhere. The main window reads the same
-/// toggle through `platform::webview2_gpu_args` (see the platform
-/// module docs).
-fn gpu_browser_args() -> Option<&'static str> {
-    if crate::shell_config::gpu_acceleration() == Some(false) {
-        Some("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu")
-    } else {
-        None
-    }
+/// WebView2 additional browser arguments for the persisted toggles
+/// (GPU fallback + untrusted-TLS bypass). Single source: the platform
+/// module's [`crate::platform::webview2_browser_args`]; the main
+/// window reads the same helper in `lib.rs`.
+fn browser_args() -> Option<String> {
+    crate::platform::webview2_browser_args()
 }
 
 /// Build a `session-<id>` window: navigation lockdown, bridge init
@@ -1634,8 +1626,8 @@ fn build_session_window(
     if let Some(ident) = ident {
         builder = builder.data_store_identifier(ident);
     }
-    if let Some(args) = gpu_browser_args() {
-        builder = builder.additional_browser_args(args);
+    if let Some(args) = browser_args() {
+        builder = builder.additional_browser_args(&args);
     }
     // The same lockdown the main window carries, plus the manager
     // report: session-window navigations drive tab lifecycle (page

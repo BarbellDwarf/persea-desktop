@@ -463,6 +463,30 @@ async function initGpuAcceleration() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Network (untrusted TLS certificates)                                */
+/* ------------------------------------------------------------------ */
+
+async function initInsecureTls() {
+  const toggle = document.getElementById("insecure-tls-enabled");
+  if (!toggle) return;
+  let settings = null;
+  try {
+    settings = await invoke("cmd_shell_get_settings");
+  } catch {
+    return;
+  }
+  toggle.checked = !!(settings && settings.allowInsecureTls);
+  toggle.addEventListener("change", async () => {
+    try {
+      await invoke("cmd_shell_set_insecure_tls", { enabled: toggle.checked });
+    } catch (err) {
+      toggle.checked = !toggle.checked;
+      alert("Failed to update the TLS setting: " + err);
+    }
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* About + header                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -505,3 +529,4 @@ initAbout();
 initHeader();
 initNotifications();
 initGpuAcceleration();
+initInsecureTls();

@@ -3830,6 +3830,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-wdio-webdriver",
  "url",
+ "webkit2gtk",
  "windows",
  "windows-native-keyring-store",
  "x11rb 0.14.0",
