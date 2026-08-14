@@ -16,6 +16,16 @@ REC="$WORK/recordings"
 DRV="$WORK/drives"
 CONF="$WORK/e2e.toml"
 
+# The server binary is native Windows when running under Git Bash; hand
+# it Windows-style paths or SQLite cannot open the database.
+if command -v cygpath >/dev/null 2>&1; then
+  WORK="$(cygpath -m "$WORK")"
+  DB="$(cygpath -m "$DB")"
+  REC="$(cygpath -m "$REC")"
+  DRV="$(cygpath -m "$DRV")"
+  CONF="$(cygpath -m "$CONF")"
+fi
+
 echo "[provision] building persea from $PERSEA_REPO (this takes a few minutes)..."
 cargo build --release --manifest-path "$PERSEA_REPO/Cargo.toml" >/dev/null 2>&1
 BIN="$PERSEA_REPO/target/release/persea"
