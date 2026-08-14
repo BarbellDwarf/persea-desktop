@@ -21,6 +21,14 @@ interim workarounds.
 | Drag-and-drop, clipboard | Works | Works | wry 0.47+ handles Wayland drag-drop; clipboard is native. |
 | GPU / DMABUF | See troubleshooting | See troubleshooting | DMABUF renderer quirks (NVIDIA blank windows) are most visible on Wayland sessions. See `linux-troubleshooting.md`. |
 
+## Closing the window
+
+On Linux (X11 and Wayland alike) closing the main window quits the
+app: the tray and the in-window menu bar are not guaranteed to be
+visible, so there would otherwise be no reliable way to quit. On
+Windows and macOS closing the window keeps the app running in the tray
+(Quit lives in the tray or the app menu).
+
 ## Global hotkeys: compositor-level interim
 
 While the app's own global shortcuts are off on Wayland, the same

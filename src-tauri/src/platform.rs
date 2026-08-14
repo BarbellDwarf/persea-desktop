@@ -136,23 +136,27 @@ pub fn apply_gpu_env() {
 
 /// Apply the "Allow untrusted TLS certificates" toggle to the web
 /// engines. Linux: every webview shares one WebKitGTK web context, so
-/// flipping its TLS errors policy to IGNORE covers the whole app and
-/// takes effect immediately. Windows: the flag rides in the WebView2
-/// launch args ([`webview2_browser_args`]), which are read when a
-/// window is created, so it applies at startup and to windows created
-/// after a runtime toggle. macOS: wry/tauri expose no certificate-bypass
-/// API, so the system trust store is the only path there.
+/// flipping its TLS errors policy (IGNORE when the toggle is on, FAIL
+/// when it is off) covers the whole app and takes effect immediately,
+/// in both directions. Windows: the flag rides in the WebView2 launch
+/// args ([`webview2_browser_args`]), which are read when a window is
+/// created, so it applies at startup and to windows created after a
+/// runtime toggle (turning it off restores validation on the next
+/// launch). macOS: wry/tauri expose no certificate-bypass API, so the
+/// system trust store is the only path there.
 #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 pub fn apply_insecure_tls_policy(app: &tauri::AppHandle) {
     #[cfg(target_os = "linux")]
     {
-        if !crate::shell_config::allow_insecure_tls() {
-            return;
-        }
         use tauri::Manager;
         use webkit2gtk::{WebContextExt, WebViewExt};
+        let policy = if crate::shell_config::allow_insecure_tls() {
+            webkit2gtk::TLSErrorsPolicy::Ignore
+        } else {
+            webkit2gtk::TLSErrorsPolicy::Fail
+        };
         if let Some(win) = app.get_webview_window(crate::windows::MAIN_WINDOW_LABEL) {
-            let _ = win.with_webview(|platform| {
+            let _ = win.with_webview(move |platform| {
                 if let Some(context) = platform.inner().context() {
                     // Deprecated since WebKitGTK 2.32 in favor of
                     // per-host allow_tls_certificate_for_host, which
@@ -161,7 +165,7 @@ pub fn apply_insecure_tls_policy(app: &tauri::AppHandle) {
                     // handshake, and the toggle is app-global anyway,
                     // so the context-wide policy is the right fit.
                     #[allow(deprecated)]
-                    context.set_tls_errors_policy(webkit2gtk::TLSErrorsPolicy::Ignore);
+                    context.set_tls_errors_policy(policy);
                 }
             });
         }
