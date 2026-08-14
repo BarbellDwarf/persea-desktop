@@ -72,28 +72,38 @@ pub fn run() {
                 .collect();
             let default_url = origins.first().cloned().unwrap_or_default();
             let _policy = navigation::NavigationPolicy::new(origins.clone(), Vec::new());
-            let (store_id, data_dir) = windows::instance_webview_data(app.handle(), &default_url);
-            let builder =
+            // tauri-driver (Windows e2e) needs the WebView2 DevTools port
+            // file in the DEFAULT user data folder: msedgedriver reads it
+            // from there. A custom per-instance data directory hides it
+            // ("DevToolsActivePort file doesn't exist"), so skip the
+            // custom directory under automation.
+            let automation = std::env::var("TAURI_WEBVIEW_AUTOMATION").as_deref() == Ok("true");
+            let mut builder =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("Persea Desktop")
                     .inner_size(1280.0, 800.0)
                     .min_inner_size(800.0, 600.0)
                     .center()
-                    .initialization_script(bridge::init_script())
-                    .data_directory(data_dir);
-            let builder = match platform::webview2_gpu_args() {
-                Some(args) => builder.additional_browser_args(args),
-                None => builder,
-            };
-            let builder = if kiosk::is_active() {
-                builder.devtools(false)
-            } else {
-                builder
-            };
-            let builder = match store_id {
-                Some(id) => builder.data_store_identifier(id),
-                None => builder,
-            };
+                    .initialization_script(bridge::init_script());
+            if !automation {
+                let (store_id, data_dir) =
+                    windows::instance_webview_data(app.handle(), &default_url);
+                builder = builder.data_directory(data_dir);
+                if let Some(id) = store_id {
+                    builder = builder.data_store_identifier(id);
+                }
+            }
+            if automation {
+                // msedgedriver attaches over CDP: WebView2 only writes the
+                // DevToolsActivePort file when remote debugging is in the
+                // environment's browser args.
+                builder = builder.additional_browser_args("--remote-debugging-port=0");
+            } else if let Some(args) = platform::webview2_gpu_args() {
+                builder = builder.additional_browser_args(args);
+            }
+            if kiosk::is_active() {
+                builder = builder.devtools(false);
+            }
             let builder = windows::lock_viewport_builder(builder, app.handle().clone());
             builder.build()?;
 

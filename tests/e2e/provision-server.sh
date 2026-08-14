@@ -16,6 +16,16 @@ REC="$WORK/recordings"
 DRV="$WORK/drives"
 CONF="$WORK/e2e.toml"
 
+# The server binary is native Windows when running under Git Bash; hand
+# it Windows-style paths or SQLite cannot open the database.
+if command -v cygpath >/dev/null 2>&1; then
+  WORK="$(cygpath -m "$WORK")"
+  DB="$(cygpath -m "$DB")"
+  REC="$(cygpath -m "$REC")"
+  DRV="$(cygpath -m "$DRV")"
+  CONF="$(cygpath -m "$CONF")"
+fi
+
 echo "[provision] building persea from $PERSEA_REPO (this takes a few minutes)..."
 cargo build --release --manifest-path "$PERSEA_REPO/Cargo.toml" >/dev/null 2>&1
 BIN="$PERSEA_REPO/target/release/persea"
@@ -48,7 +58,27 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-echo "[provision] PERSEA_E2E_BASE_URL=http://127.0.0.1:$PORT"
-echo "[provision] PERSEA_E2E_API_KEY=$KEY"
-echo "[provision] PERSEA_E2E_PID=$(cat "$WORK/persea.pid")"
-echo "[provision] PERSEA_E2E_WORK=$WORK"
+echo "[provision] completing first-run setup (admin user)..."
+ADMIN_PASSWORD="${PERSEA_E2E_ADMIN_PASSWORD:-e2e-admin-password-12345}"
+CSRF_JAR="$WORK/csrf.cookies"
+curl -fsS -c "$CSRF_JAR" "http://127.0.0.1:$PORT/setup" >/dev/null 2>&1
+CSRF_TOKEN=$(grep csrf_token "$CSRF_JAR" | awk '{print $7}')
+[ -n "$CSRF_TOKEN" ] || { echo "could not obtain csrf token" >&2; exit 1; }
+SETUP_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -b "$CSRF_JAR" \
+  -H "X-CSRF-Token: $CSRF_TOKEN" -X POST "http://127.0.0.1:$PORT/setup" \
+  --data-urlencode "listen_addr=127.0.0.1:$PORT" \
+  --data-urlencode "db_path=$DB" \
+  --data-urlencode "db_url=" \
+  --data-urlencode "guacd_mode=external" \
+  --data-urlencode "guacd_addr=127.0.0.1:4822" \
+  --data-urlencode "guacd_path=" \
+  --data-urlencode "admin_email=e2e-admin" \
+  --data-urlencode "admin_name=E2E Admin" \
+  --data-urlencode "admin_password=$ADMIN_PASSWORD")
+[ "$SETUP_HTTP" = "200" ] || [ "$SETUP_HTTP" = "302" ] || [ "$SETUP_HTTP" = "303" ] \
+  || { echo "setup POST failed (HTTP $SETUP_HTTP)" >&2; exit 1; }
+
+echo "PERSEA_E2E_BASE_URL=http://127.0.0.1:$PORT"
+echo "PERSEA_E2E_API_KEY=$KEY"
+echo "PERSEA_E2E_PID=$(cat "$WORK/persea.pid")"
+echo "PERSEA_E2E_WORK=$WORK"

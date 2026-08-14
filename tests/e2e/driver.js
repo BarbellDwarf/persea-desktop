@@ -10,34 +10,55 @@
 
 const { Builder } = require("selenium-webdriver");
 const { spawn } = require("child_process");
-const { mkdirSync } = require("fs");
+const { mkdirSync, writeFileSync } = require("fs");
 
 const APPS_DIR = process.env.PERSEA_E2E_APPS_DIR || "target/release";
-const APP_NAME = process.platform === "darwin"
-  ? "persea-desktop.app"
-  : process.platform === "win32"
-    ? "persea-desktop.exe"
-    : "persea-desktop";
-const APP_PATH = process.platform === "darwin"
-  ? `${APPS_DIR}/bundle/macos/${APP_NAME}`
-  : process.platform === "win32"
-    ? `${APPS_DIR}/${APP_NAME}`
-    : `${APPS_DIR}/${APP_NAME}`;
+const APP_NAME = process.platform === "win32"
+  ? "persea-desktop.exe"
+  : "persea-desktop";
+const APP_PATH = `${APPS_DIR}/${APP_NAME}`;
 
 let driverProcess = null;
 
 function startDriver() {
+  const fs = require("fs");
+  const log = fs.openSync("tauri-driver.log", "w");
   driverProcess = spawn("tauri-driver", ["--port", "4444"], {
-    stdio: "ignore",
+    stdio: ["ignore", log, log],
   });
-  // tauri-driver needs a moment to bind the port.
-  return new Promise((resolve) => setTimeout(resolve, 1500));
+  // tauri-driver needs a moment to bind the port; poll instead of a
+  // fixed sleep so a slow start is tolerated and failures are visible.
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 15000;
+    const probe = () => {
+      const net = require("net");
+      const socket = net.connect(4444, "127.0.0.1");
+      socket.on("connect", () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.on("error", () => {
+        socket.destroy();
+        if (Date.now() > deadline) {
+          const fs = require("fs");
+          const tail = fs.existsSync("tauri-driver.log")
+            ? fs.readFileSync("tauri-driver.log", "utf8").split("\n").slice(-10).join("\n")
+            : "(no log)";
+          reject(new Error(`tauri-driver did not bind port 4444:\n${tail}`));
+        } else {
+          setTimeout(probe, 250);
+        }
+      });
+    };
+    probe();
+  });
 }
 
 async function newSession() {
   const builder = new Builder()
     .usingServer("http://127.0.0.1:4444")
-    .withCapabilities({ "tauri:options": { application: APP_PATH } });
+    .withCapabilities({ "tauri:options": { application: APP_PATH } })
+    .forBrowser("wry");
   return builder.build();
 }
 
@@ -57,4 +78,21 @@ function screenshot(driver, name) {
   });
 }
 
-module.exports = { startDriver, stopDriver, newSession, screenshot };
+// Pre-seed the shell's instance store before the app launches. The
+// navigation lockdown only allows origins present in the store.
+function seedInstances(instances) {
+  const { homedir } = require("os");
+  const { join } = require("path");
+  const configDir = process.platform === "win32"
+    ? join(process.env.APPDATA, "dev.persea.desktop")
+    : process.platform === "darwin"
+      ? join(homedir(), "Library", "Application Support", "dev.persea.desktop", "config")
+      : join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "dev.persea.desktop");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(
+    join(configDir, "instances.json"),
+    JSON.stringify({ instances, lastUsed: instances.find((i) => i.default)?.url || null }),
+  );
+}
+
+module.exports = { startDriver, stopDriver, newSession, screenshot, seedInstances };
