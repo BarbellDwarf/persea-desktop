@@ -1,6 +1,6 @@
 /* Persea Desktop settings page: instances CRUD + probe display,
- * appearance (shell theme), global shortcuts, placeholders for later
- * features, About.
+ * appearance (shell theme), hardware acceleration, global shortcuts,
+ * placeholders for later features, About.
  * Runs after app.js (invoke, initTheme, capabilityChips, copyText).
  */
 
@@ -435,6 +435,31 @@ async function initShortcuts() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Performance (hardware acceleration)                                 */
+/* ------------------------------------------------------------------ */
+
+async function initGpuAcceleration() {
+  const toggle = document.getElementById("gpu-acceleration-enabled");
+  if (!toggle) return;
+  let settings = null;
+  try {
+    settings = await invoke("shell_get_settings");
+  } catch {
+    return;
+  }
+  // Unset (no gpuAcceleration in shell.json yet) = engine defaults = on.
+  toggle.checked = settings && settings.gpuAcceleration !== false;
+  toggle.addEventListener("change", async () => {
+    try {
+      await invoke("shell_set_gpu_acceleration", { enabled: toggle.checked });
+    } catch (err) {
+      toggle.checked = !toggle.checked;
+      alert("Failed to update hardware acceleration: " + err);
+    }
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* About + header                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -476,3 +501,4 @@ initShortcuts();
 initAbout();
 initHeader();
 initNotifications();
+initGpuAcceleration();

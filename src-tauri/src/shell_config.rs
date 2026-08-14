@@ -1,6 +1,6 @@
 //! Shell-side settings, separate from the instance store: the appearance
-//! theme (light / dark / auto) and app identity. Persisted at
-//! `app_config_dir()/shell.json`.
+//! theme (light / dark / auto), the hardware acceleration toggle and app
+//! identity. Persisted at `app_config_dir()/shell.json`.
 //!
 //! The shell theme mirrors the persea web UI design language; the tokens
 //! live in `shell/settings.css` and apply to every shell page. The shell
@@ -21,6 +21,13 @@ pub struct ShellConfigFile {
     /// `prefers-color-scheme` (or the Tauri window theme).
     #[serde(default = "default_appearance")]
     pub appearance: String,
+    /// The "Hardware acceleration" toggle. `Some(true)` forces
+    /// acceleration on, `Some(false)` forces it off (software
+    /// rendering), `None` leaves the engine defaults untouched, which is
+    /// the initial state for every existing install. Consumed by the
+    /// platform GPU wiring in `platform.rs` and `windows.rs`.
+    #[serde(default, rename = "gpuAcceleration")]
+    pub gpu_acceleration: Option<bool>,
 }
 
 fn default_appearance() -> String {
@@ -31,6 +38,7 @@ impl Default for ShellConfigFile {
     fn default() -> Self {
         Self {
             appearance: default_appearance(),
+            gpu_acceleration: None,
         }
     }
 }
@@ -91,6 +99,10 @@ impl ShellConfig {
             )),
         }
     }
+
+    pub fn set_gpu_acceleration(&mut self, enabled: bool) {
+        self.file.gpu_acceleration = Some(enabled);
+    }
 }
 
 /// Initialize the process global. Called by the dispatcher from the
@@ -116,6 +128,14 @@ pub fn appearance() -> String {
     with_config(|c| c.file.appearance.clone()).unwrap_or_else(default_appearance)
 }
 
+/// The persisted "Hardware acceleration" toggle; `None` = unset, engine
+/// defaults. Consumed by `platform::gpu_override` (WebKitGTK env on
+/// Linux, WebView2 launch args on Windows, see the platform module
+/// docs).
+pub fn gpu_acceleration() -> Option<bool> {
+    with_config(|c| c.file.gpu_acceleration).flatten()
+}
+
 fn shell_unavailable() -> String {
     "shell config is not initialized".to_string()
 }
@@ -129,6 +149,17 @@ pub fn cmd_shell_get_settings() -> Result<ShellConfigFile, String> {
 pub fn cmd_shell_set_appearance(appearance: String) -> Result<ShellConfigFile, String> {
     with_config(|c| {
         c.set_appearance(&appearance)?;
+        c.save()?;
+        Ok(c.file.clone())
+    })
+    .ok_or_else(shell_unavailable)?
+}
+
+#[tauri::command]
+#[allow(dead_code)] // registered by the dispatcher wiring (invoke_handler)
+pub fn cmd_shell_set_gpu_acceleration(enabled: bool) -> Result<ShellConfigFile, String> {
+    with_config(|c| {
+        c.set_gpu_acceleration(enabled);
         c.save()?;
         Ok(c.file.clone())
     })
@@ -175,6 +206,32 @@ mod tests {
         assert!(cfg.set_appearance("light").is_ok());
         assert!(cfg.set_appearance("dark").is_ok());
         assert!(cfg.set_appearance("auto").is_ok());
+    }
+
+    #[test]
+    fn gpu_acceleration_round_trip() {
+        let path = tmp_path("gpu");
+        let mut cfg = ShellConfig::load(&path);
+        assert_eq!(cfg.file.gpu_acceleration, None);
+        cfg.set_gpu_acceleration(true);
+        cfg.save().unwrap();
+        let loaded = ShellConfig::load(&path);
+        assert_eq!(loaded.file.gpu_acceleration, Some(true));
+        let mut cfg = ShellConfig::load(&path);
+        cfg.set_gpu_acceleration(false);
+        cfg.save().unwrap();
+        let loaded = ShellConfig::load(&path);
+        assert_eq!(loaded.file.gpu_acceleration, Some(false));
+    }
+
+    #[test]
+    fn legacy_shell_json_without_gpu_field_loads_as_none() {
+        let path = tmp_path("legacygpu");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, r#"{"appearance":"dark"}"#).unwrap();
+        let cfg = ShellConfig::load(&path);
+        assert_eq!(cfg.file.appearance, "dark");
+        assert_eq!(cfg.file.gpu_acceleration, None);
     }
 
     #[test]

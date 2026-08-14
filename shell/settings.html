@@ -42,6 +42,23 @@
       </fieldset>
     </section>
 
+    <section class="settings-section" id="sec-performance" aria-labelledby="sec-performance-title">
+      <h2 id="sec-performance-title">Performance</h2>
+      <p class="section-desc">
+        Hardware acceleration for the app's windows. Turn it off when a
+        GPU driver renders blank or glitchy windows; the app falls back
+        to software rendering.
+      </p>
+      <label class="toggle-row">
+        <span class="toggle-label">Hardware acceleration</span>
+        <div class="toggle-switch">
+          <input type="checkbox" id="gpu-acceleration-enabled">
+          <span class="toggle-slider"></span>
+        </div>
+      </label>
+      <p class="section-desc">On by default. The change applies after the next launch.</p>
+    </section>
+
     <section class="settings-section" id="sec-shortcuts" aria-labelledby="sec-shortcuts-title">
       <h2 id="sec-shortcuts-title">Shortcuts</h2>
       <p class="section-desc">

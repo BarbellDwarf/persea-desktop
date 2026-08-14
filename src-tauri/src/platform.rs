@@ -41,17 +41,22 @@
 //!   the tray uses; the shell settings page also carries an About
 //!   section for the in-app variant).
 //!
-//! # GPU environment (consumed by a later change)
+//! # GPU environment
 //!
-//! [`gpu_override`] returns the persisted "Hardware acceleration"
-//! toggle once a later change wires the setting surface into it; until
-//! then it returns `None`, which means "engine defaults" everywhere.
-//! [`apply_gpu_env`] must run before any webview exists (first line of
-//! `run()`): with the toggle OFF it exports the WebKitGTK software
-//! fallback variables on Linux. There is deliberately no shipped
-//! default that disables acceleration; the NVIDIA DMABUF workaround is
-//! documented in `docs/linux-troubleshooting.md`, not applied by
-//! default.
+//! [`gpu_override`] reads the persisted "Hardware acceleration" toggle
+//! from the shell config store (`shell_config::gpu_acceleration`):
+//! `Some(true)` / `Some(false)` mirror the toggle, `None` means "no
+//! override, engine defaults" and is the state every existing install
+//! starts in. [`apply_gpu_env`] runs before any webview exists, in the
+//! setup hook AFTER `shell_config::setup` (the toggle must be loaded to
+//! be readable) and BEFORE the main window builder: with the toggle OFF
+//! it exports the WebKitGTK software fallback variables on Linux
+//! (WebKitGTK reads them at process start; late exports are ignored),
+//! and Windows disables the GPU through the WebView2 launch args of
+//! [`webview2_gpu_args`]. macOS has nothing to disable (Metal). There is
+//! deliberately no shipped default that disables acceleration; the
+//! NVIDIA DMABUF workaround is documented in
+//! `docs/linux-troubleshooting.md`, not applied by default.
 
 #![allow(dead_code)] // consumed by the lib.rs wiring (dispatcher)
 
@@ -73,17 +78,36 @@ const ID_QUIT: &str = "menu-quit";
 
 /// The persisted "Hardware acceleration" toggle.
 ///
-/// `Some(true)`/`Some(false)` once the settings wiring lands (the
-/// setting is consumed here and by the engine flag plumbing); `None`
-/// means "no override, engine defaults". Callers must treat `None` the
-/// same as `Some(true)`.
+/// `Some(true)` / `Some(false)` mirror the shell settings toggle;
+/// `None` means "no override, engine defaults" and is returned while
+/// the setting is unset (and, defensively, while the shell config is
+/// not initialized yet, which is why callers must treat `None` the
+/// same as `Some(true)`).
 pub fn gpu_override() -> Option<bool> {
-    None
+    crate::shell_config::gpu_acceleration()
 }
 
-/// Apply the process-level GPU environment. Call once, at the very top
-/// of `run()`, before any webview exists: WebKitGTK reads these
-/// variables at process start, so late exports are ignored.
+/// WebView2 additional browser arguments driven by the toggle.
+///
+/// `Some(...)` only when the toggle is OFF: `--disable-gpu` on top of
+/// wry's default feature disables (WebView2 replaces the defaults
+/// wholesale when any additional argument is set, so the string carries
+/// both). `None` means "no arguments, engine defaults", which keeps
+/// acceleration on. Windows-only in effect; the builder method is a
+/// no-op elsewhere. `windows.rs` applies it to the strip and session
+/// windows; the main-window builder in `lib.rs` uses it the same way.
+pub fn webview2_gpu_args() -> Option<&'static str> {
+    if gpu_override() == Some(false) {
+        Some("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu")
+    } else {
+        None
+    }
+}
+
+/// Apply the process-level GPU environment. Call once in the setup
+/// hook, after `shell_config::setup` (the toggle must be loaded) and
+/// before any webview exists: WebKitGTK reads these variables at
+/// process start, so late exports are ignored.
 pub fn apply_gpu_env() {
     if gpu_override() == Some(false) {
         #[cfg(target_os = "linux")]
@@ -94,8 +118,8 @@ pub fn apply_gpu_env() {
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
-        // Windows disables the GPU via WebView2 launch args, macOS has
-        // nothing to disable (Metal); both land with the toggle wiring.
+        // Windows disables the GPU via the WebView2 launch args in
+        // webview2_gpu_args; macOS has nothing to disable (Metal).
     }
 }
 

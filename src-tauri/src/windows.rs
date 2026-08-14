@@ -1281,7 +1281,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // The strip window (hidden until the first tab exists; the dock
     // logic positions it above the main window).
-    let builder = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app_handle,
         STRIP_WINDOW_LABEL,
         WebviewUrl::App("tabstrip.html".into()),
@@ -1294,6 +1294,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     .skip_taskbar(true)
     .resizable(false)
     .always_on_top(true);
+    if let Some(args) = gpu_browser_args() {
+        builder = builder.additional_browser_args(args);
+    }
     let strip = builder.build()?;
     let dock_tx = tx.clone();
     strip.on_window_event(move |event| {
@@ -1592,6 +1595,22 @@ fn execute_effects(app: &tauri::AppHandle, effects: Vec<Effect>) {
     });
 }
 
+/// WebView2 additional browser arguments for the persisted "Hardware
+/// acceleration" toggle: `--disable-gpu` (plus wry's default feature
+/// disables, which WebView2 replaces wholesale when any additional
+/// argument is set) when the toggle is OFF, nothing otherwise, which
+/// keeps acceleration on engine defaults. Windows-only in effect; the
+/// builder method is a no-op elsewhere. The main window reads the same
+/// toggle through `platform::webview2_gpu_args` (see the platform
+/// module docs).
+fn gpu_browser_args() -> Option<&'static str> {
+    if crate::shell_config::gpu_acceleration() == Some(false) {
+        Some("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu")
+    } else {
+        None
+    }
+}
+
 /// Build a `session-<id>` window: navigation lockdown, bridge init
 /// script, download interception, per-instance cookie store, lifecycle
 /// listeners. Must run on the main thread.
@@ -1614,6 +1633,9 @@ fn build_session_window(
         .data_directory(data_dir);
     if let Some(ident) = ident {
         builder = builder.data_store_identifier(ident);
+    }
+    if let Some(args) = gpu_browser_args() {
+        builder = builder.additional_browser_args(args);
     }
     // The same lockdown the main window carries, plus the manager
     // report: session-window navigations drive tab lifecycle (page
