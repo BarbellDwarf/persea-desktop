@@ -220,7 +220,7 @@ pub fn records() -> Vec<DownloadRecord> {
 /// attribute, so the anchor-provided name survives.
 pub fn handler<R: Runtime>(
     app: AppHandle<R>,
-) -> impl Fn(Webview<R>, DownloadEvent<'_>) -> bool + Send + Sync + 'static {
+) -> impl for<'a> Fn(Webview<R>, DownloadEvent<'a>) -> bool + Send + Sync + 'static {
     move |_webview, event| match event {
         DownloadEvent::Requested { url, destination } => {
             let Some(dir) = download_dir(&app) else {

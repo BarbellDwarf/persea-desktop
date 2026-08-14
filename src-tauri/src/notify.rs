@@ -343,7 +343,9 @@ pub fn updater_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 async fn background_check_loop(app: AppHandle) {
     loop {
         match check_available(&app).await {
-            Ok(Some(version)) => announce_available(&app, &version),
+            Ok(Some(version)) => {
+                announce_available(&app, &version);
+            }
             Ok(None) => {}
             Err(e) => eprintln!("persea-desktop: update check failed: {e}"),
         }

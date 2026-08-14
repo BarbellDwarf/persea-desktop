@@ -163,53 +163,50 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         Some("CmdOrCtrl+N"),
     )?;
     let close_tab = MenuItem::with_id(app, ID_CLOSE_TAB, "Close Tab", true, Some("CmdOrCtrl+W"))?;
-
-    let mut file_items: Vec<&dyn IsMenuItem<tauri::Wry>> = vec![&new_session, &close_tab];
+    let file = Submenu::with_id(app, "File", true)?;
+    file.append_items(&[&new_session, &close_tab])?;
     #[cfg(not(target_os = "macos"))]
     {
         let sep = PredefinedMenuItem::separator(app)?;
-        file_items.push(&sep);
+        file.append_items(&[&sep])?;
         #[cfg(target_os = "linux")]
         {
             // PredefinedMenuItem::quit is unsupported on GTK and would
             // not render; a plain item with the standard chord.
             let quit = MenuItem::with_id(app, ID_QUIT, "Quit", true, Some("CmdOrCtrl+Q"))?;
-            file_items.push(&quit);
+            file.append_items(&[&quit])?;
         }
         #[cfg(not(target_os = "linux"))]
         {
             let quit = PredefinedMenuItem::quit(app, Some("Quit"))?;
-            file_items.push(&quit);
+            file.append_items(&[&quit])?;
         }
     }
-    let file = Submenu::with_items(app, "File", true, &file_items)?;
 
-    let edit_items: Vec<&dyn IsMenuItem<tauri::Wry>> = {
-        #[cfg(target_os = "linux")]
-        {
-            // Undo/redo predefined items are unsupported on GTK; the
-            // clipboard items are native there.
-            let cut = PredefinedMenuItem::cut(app, None)?;
-            let copy = PredefinedMenuItem::copy(app, None)?;
-            let paste = PredefinedMenuItem::paste(app, None)?;
-            let sep = PredefinedMenuItem::separator(app)?;
-            let select_all = PredefinedMenuItem::select_all(app, None)?;
-            vec![&cut, &copy, &paste, &sep, &select_all]
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            let undo = PredefinedMenuItem::undo(app, None)?;
-            let redo = PredefinedMenuItem::redo(app, None)?;
-            let cut = PredefinedMenuItem::cut(app, None)?;
-            let copy = PredefinedMenuItem::copy(app, None)?;
-            let paste = PredefinedMenuItem::paste(app, None)?;
-            let sep1 = PredefinedMenuItem::separator(app)?;
-            let select_all = PredefinedMenuItem::select_all(app, None)?;
-            let sep2 = PredefinedMenuItem::separator(app)?;
-            vec![&undo, &redo, &sep1, &cut, &copy, &paste, &sep2, &select_all]
-        }
-    };
-    let edit = Submenu::with_items(app, "Edit", true, &edit_items)?;
+    let edit = Submenu::with_id(app, "Edit", true)?;
+    #[cfg(target_os = "linux")]
+    {
+        // Undo/redo predefined items are unsupported on GTK; the
+        // clipboard items are native there.
+        let cut = PredefinedMenuItem::cut(app, None)?;
+        let copy = PredefinedMenuItem::copy(app, None)?;
+        let paste = PredefinedMenuItem::paste(app, None)?;
+        let sep = PredefinedMenuItem::separator(app)?;
+        let select_all = PredefinedMenuItem::select_all(app, None)?;
+        edit.append_items(&[&cut, &copy, &paste, &sep, &select_all])?;
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let undo = PredefinedMenuItem::undo(app, None)?;
+        let redo = PredefinedMenuItem::redo(app, None)?;
+        let cut = PredefinedMenuItem::cut(app, None)?;
+        let copy = PredefinedMenuItem::copy(app, None)?;
+        let paste = PredefinedMenuItem::paste(app, None)?;
+        let sep1 = PredefinedMenuItem::separator(app)?;
+        let select_all = PredefinedMenuItem::select_all(app, None)?;
+        let sep2 = PredefinedMenuItem::separator(app)?;
+        edit.append_items(&[&undo, &redo, &sep1, &cut, &copy, &paste, &sep2, &select_all])?;
+    }
 
     let fullscreen_accel = if cfg!(target_os = "macos") {
         "Ctrl+Cmd+F"
@@ -224,7 +221,8 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         Some(fullscreen_accel),
     )?;
     let toggle_tabs = MenuItem::with_id(app, ID_TOGGLE_TABS, "Toggle Tabs", true, None::<&str>)?;
-    let view = Submenu::with_items(app, "View", true, &[&fullscreen, &toggle_tabs])?;
+    let view = Submenu::with_id(app, "View", true)?;
+    view.append_items(&[&fullscreen, &toggle_tabs])?;
 
     let docs = MenuItem::with_id(app, ID_DOCS, "Docs", true, None::<&str>)?;
     let about = PredefinedMenuItem::about(
@@ -236,7 +234,8 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
             ..Default::default()
         }),
     )?;
-    let help = Submenu::with_items(app, "Help", true, &[&docs, &about])?;
+    let help = Submenu::with_id(app, "Help", true)?;
+    help.append_items(&[&docs, &about])?;
 
     let mut items: Vec<&dyn IsMenuItem<tauri::Wry>> = Vec::new();
     #[cfg(target_os = "macos")]
@@ -254,7 +253,8 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         )?;
         let sep = PredefinedMenuItem::separator(app)?;
         let quit = PredefinedMenuItem::quit(app, None)?;
-        let app_menu = Submenu::with_items(app, "Persea Desktop", true, &[&about, &sep, &quit])?;
+        let app_menu = Submenu::with_id(app, "Persea Desktop", true)?;
+        app_menu.append_items(&[&about, &sep, &quit])?;
         items.push(&app_menu);
     }
     items.push(&file);
