@@ -21,6 +21,16 @@ module.exports = async function () {
     await waitForText(driver, "Add your first server");
     await screenshot(driver, "shell-welcome");
 
+    // Add an instance through the welcome form. This exercises the
+    // ACL-gated instances_add + probe path end to end (regression for
+    // "Command instances_add not allowed by ACL").
+    const { By } = require("selenium-webdriver");
+    await driver.findElement(By.id("welcome-name")).sendKeys("E2E UI");
+    await driver.findElement(By.id("welcome-url")).sendKeys(BASE);
+    await driver.findElement(By.id("welcome-form")).submit();
+    await waitForText(driver, "Server version");
+    await screenshot(driver, "shell-welcome-added");
+
     // The welcome flow opens the settings page for the guided add.
     // (The add-instance form lives in settings; this spec drives the
     //  form only when the instance store is empty, so it is idempotent.)
