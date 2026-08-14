@@ -13,16 +13,10 @@ const { spawn } = require("child_process");
 const { mkdirSync } = require("fs");
 
 const APPS_DIR = process.env.PERSEA_E2E_APPS_DIR || "target/release";
-const APP_NAME = process.platform === "darwin"
-  ? "persea-desktop.app"
-  : process.platform === "win32"
-    ? "persea-desktop.exe"
-    : "persea-desktop";
-const APP_PATH = process.platform === "darwin"
-  ? `${APPS_DIR}/bundle/macos/${APP_NAME}`
-  : process.platform === "win32"
-    ? `${APPS_DIR}/${APP_NAME}`
-    : `${APPS_DIR}/${APP_NAME}`;
+const APP_NAME = process.platform === "win32"
+  ? "persea-desktop.exe"
+  : "persea-desktop";
+const APP_PATH = `${APPS_DIR}/${APP_NAME}`;
 
 let driverProcess = null;
 
@@ -37,7 +31,8 @@ function startDriver() {
 async function newSession() {
   const builder = new Builder()
     .usingServer("http://127.0.0.1:4444")
-    .withCapabilities({ "tauri:options": { application: APP_PATH } });
+    .withCapabilities({ "tauri:options": { application: APP_PATH } })
+    .forBrowser("wry");
   return builder.build();
 }
 

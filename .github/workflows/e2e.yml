@@ -75,6 +75,7 @@ jobs:
         env:
           PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
           PERSEA_E2E_API_KEY: ${{ env.PERSEA_E2E_API_KEY }}
+          PERSEA_E2E_APPS_DIR: ../../src-tauri/target/debug
         run: xvfb-run -a node run-specs.js
 
       - name: Run the E2E specs (macOS / Windows)
@@ -83,6 +84,7 @@ jobs:
         env:
           PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
           PERSEA_E2E_API_KEY: ${{ env.PERSEA_E2E_API_KEY }}
+          PERSEA_E2E_APPS_DIR: ../../src-tauri/target/debug
         run: node run-specs.js
 
       - name: Capture the canonical desktop screenshots (Linux)
@@ -92,6 +94,7 @@ jobs:
           PERSEA_E2E_SHOTS: ../../docs/screenshots
           PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
           PERSEA_E2E_API_KEY: ${{ env.PERSEA_E2E_API_KEY }}
+          PERSEA_E2E_APPS_DIR: ../../src-tauri/target/debug
         run: xvfb-run -a node run-specs.js
 
       - name: Capture the canonical desktop screenshots (macOS / Windows)
@@ -101,6 +104,7 @@ jobs:
           PERSEA_E2E_SHOTS: ../../docs/screenshots
           PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
           PERSEA_E2E_API_KEY: ${{ env.PERSEA_E2E_API_KEY }}
+          PERSEA_E2E_APPS_DIR: ../../src-tauri/target/debug
         run: node run-specs.js
 
       - name: Open a regeneration PR
