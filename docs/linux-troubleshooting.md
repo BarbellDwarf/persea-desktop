@@ -98,7 +98,7 @@ the decode path on Linux must be verified per engine version:
    on that server until the shipped WebKitGTK version decodes H.264.
 
 The result should be recorded per distro/engine version; the JPEG
-fallback existing at all is the pass condition for 1.2.0 on Linux.
+fallback existing at all is the pass condition for 1.0.0 on Linux.
 
 ## RDP audio and autoplay
 

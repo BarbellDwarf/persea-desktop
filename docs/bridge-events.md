@@ -3,7 +3,7 @@
 The shell and the persea page talk over Tauri's event bus. This document is
 the contract; the server side mirrors it in the desktop bridge partial
 (`templates/partials/desktop_bridge.html` on the persea server, live on the
-v1.2.0 branch).
+main branch).
 
 ## Transport and scoping
 

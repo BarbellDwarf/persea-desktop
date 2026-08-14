@@ -9,7 +9,7 @@
 //! session list feeds the tray menu.
 //!
 //! SSE upgrade (locked design): when the instance probe reports the
-//! `session_events` capability (server >= 1.2.0), the task subscribes to
+//! `session_events` capability (server >= 1.0.0), the task subscribes to
 //! `GET /api/sessions/events` instead of polling. The first poll still
 //! seeds the engine (so pre-existing sessions never notify), then events
 //! stream in with `id:` cursors; on disconnect the task falls back to

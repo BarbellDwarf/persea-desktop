@@ -32,7 +32,7 @@ Requirements:
 - LUKS-encrypted drives work: the server decrypts the drive before the
   upload lands.
 
-Limitations (v1.2.0):
+Limitations (v1.0.0):
 
 - **SSH sessions**: drag-drop is not supported (the SSH drive has no
   REST upload path). Dropping on an SSH session shows a notice pointing

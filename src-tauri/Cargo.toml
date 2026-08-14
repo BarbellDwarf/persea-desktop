@@ -1,6 +1,6 @@
 [package]
 name = "persea-desktop"
-version = "1.2.0"
+version = "1.0.0"
 description = "Persea Desktop: thin client for the Persea remote access server"
 authors = ["Persea Contributors"]
 edition = "2021"

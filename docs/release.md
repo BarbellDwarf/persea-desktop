@@ -4,7 +4,7 @@ This page covers the release pipeline (`.github/workflows/release.yml`) and the 
 
 ## How a release is built
 
-Pushing a `v*` tag (for example `v1.2.0`) runs the `Release` workflow:
+Pushing a `v*` tag (for example `v1.0.0`) runs the `Release` workflow:
 
 1. **Gates**: the shared CI workflow (`ci.yml`, the same checks that run on every PR) runs first: fmt, clippy, tests on Windows, Linux and macOS, plus `cargo audit`.
 2. **Draft**: a draft GitHub Release is created for the tag (or reused on a rerun, with stale assets removed).
@@ -24,8 +24,8 @@ The publish step runs after all four legs, so a release missing a platform leg c
 3. Tag and push:
 
    ```
-   git tag v1.2.0
-   git push origin v1.2.0
+   git tag v1.0.0
+   git push origin v1.0.0
    ```
 
 4. Watch the `Release` run in Actions. When it finishes, the release page has all six installers (two Windows, three Linux, two macOS dmgs) plus the updater files: a `latest.json` and one `.sig` signature per updater package.

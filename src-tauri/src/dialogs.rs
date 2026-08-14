@@ -26,7 +26,7 @@
 //!   is the engine delegate (unreachable today, see above) or a bridge
 //!   event flow.
 //!
-//! # What ships in v1.2.0
+//! # What ships in the initial release
 //!
 //! ## confirm()
 //!
@@ -66,7 +66,7 @@
 //!
 //! ## Save dialogs
 //!
-//! Shipped in v1.2.0, wired in `downloads.rs`: every webview download
+//! Shipped in the initial release, wired in `downloads.rs`: every webview download
 //! is offered the plugin's native save dialog (`save_file(callback)`,
 //! async because the download handler runs on the main thread on every
 //! engine and the plugin's blocking variants wait on a main-thread

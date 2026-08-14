@@ -27,7 +27,7 @@
 //! dependencies; the tauri-level handler below is sufficient for the
 //! save-to-folder flow.
 //!
-//! # Save dialogs (shipped v1.2.0)
+//! # Save dialogs (shipped in the initial release)
 //!
 //! Every download is offered a native "choose where to save" dialog
 //! (tauri-plugin-dialog, registered in `lib.rs`, `dialog:allow-save`

@@ -14,7 +14,7 @@ The `Beta Desktop` workflow (`.github/workflows/beta.yml`) is dispatch-only, lik
 
 If a leg fails, the run leaves only a draft: beta testers never see a broken build, but the previous beta is gone until a successful rerun. Dispatchers should check the run result before telling testers to grab the new build.
 
-Beta builds are versioned `X.Y.Z-beta.<run number>` (for example `1.2.0-beta.42`), derived from the `tauri.conf.json` version at prepare time, so the updater sorts them correctly within the beta channel.
+Beta builds are versioned `X.Y.Z-beta.<run number>` (for example `1.0.0-beta.42`), derived from the `tauri.conf.json` version at prepare time, so the updater sorts them correctly within the beta channel.
 
 ## Becoming a beta tester
 
@@ -28,7 +28,7 @@ While the updater is wired, beta installs update automatically from the beta cha
 
 - The updater endpoints are baked into a beta build at build time and point at the beta release's `latest.json` (`https://github.com/persea-grove/persea-desktop/releases/download/beta/latest.json`) forever. A beta install keeps updating from the beta channel until it is replaced.
 - Stable installers point at the stable channel and never auto-update to a beta.
-- Leaving the beta channel means installing the stable installer, which then updates from stable. There is no automatic channel switch in v1.2.0.
+- Leaving the beta channel means installing the stable installer, which then updates from stable. There is no automatic channel switch in 1.0.0.
 - Because the `beta` tag is deleted and recreated on every run, the beta release's asset URLs are only valid between runs. The previous `latest.json` disappears with the previous release.
 
 ## Updater endpoints

@@ -9,7 +9,7 @@
  *  - first-run welcome flow (index.html only, guarded by element presence)
  */
 
-const APP_VERSION_FALLBACK = "1.2.0";
+const APP_VERSION_FALLBACK = "1.0.0";
 
 function invoke(cmd, args = {}) {
   const tauri = window.__TAURI_INTERNALS__;

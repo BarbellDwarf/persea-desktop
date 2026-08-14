@@ -27,10 +27,10 @@ use tauri::Manager;
 
 /// Timeout for a single probe HTTP request.
 pub const PROBE_TIMEOUT_SECS: u64 = 6;
-/// Minimum server version for the drive API (T23 landed in v1.1.1).
-pub const MIN_SERVER_DRIVE: &str = "1.1.1";
+/// Minimum server version for the drive API (initial release 1.0.0).
+pub const MIN_SERVER_DRIVE: &str = "1.0.0";
 /// Minimum server version for events/pairing/version/capabilities (G1-G4).
-pub const MIN_SERVER_FULL: &str = "1.2.0";
+pub const MIN_SERVER_FULL: &str = "1.0.0";
 
 static STORE: Mutex<Option<Arc<Mutex<InstanceStore>>>> = Mutex::new(None);
 
@@ -713,7 +713,7 @@ pub fn version_lt(a: &str, b: &str) -> Option<bool> {
     }
 }
 
-/// Warnings for servers below the v1.1.1 (drive) / v1.2.0 (full) floors.
+/// Warnings for servers below the 1.0.0 feature floors.
 /// Unparseable versions produce no warnings (fail open on display, the
 /// capability gate still fails closed on missing probe data).
 pub fn server_version_warnings(version: &str) -> Vec<String> {
@@ -1037,7 +1037,7 @@ mod tests {
             locked: false,
             probe: Some(CachedProbe {
                 ok: true,
-                version: "1.2.0".into(),
+                version: "1.0.0".into(),
                 capabilities: HashMap::from([
                     ("kiosk_allowed".into(), true),
                     ("desktop_pairing".into(), true),
@@ -1081,7 +1081,7 @@ mod tests {
             .as_ref()
             .unwrap();
         assert!(probe.ok);
-        assert_eq!(probe.version, "1.2.0");
+        assert_eq!(probe.version, "1.0.0");
         assert!(probe.capabilities["kiosk_allowed"]);
         assert_eq!(probe.latest_version.as_deref(), Some("1.3.0"));
         assert!(probe.update_available);
@@ -1151,15 +1151,14 @@ mod tests {
 
     #[test]
     fn version_warnings_flag_old_servers() {
-        assert!(server_version_warnings("1.0.9").len() == 2);
-        assert!(server_version_warnings("1.1.1").len() == 1);
-        assert!(server_version_warnings("1.2.0").is_empty());
-        assert!(server_version_warnings("1.2.3").is_empty());
-        assert!(server_version_warnings("v1.2.0").is_empty());
+        assert!(server_version_warnings("0.9.9").len() == 2);
+        assert!(server_version_warnings("1.0.0").is_empty());
+        assert!(server_version_warnings("1.0.1").is_empty());
+        assert!(server_version_warnings("v1.0.0").is_empty());
         assert!(server_version_warnings("not-a-version").is_empty());
-        assert!(server_version_warnings("1.2.0-beta.1").is_empty());
-        assert_eq!(parse_version("v1.2.0"), Some((1, 2, 0)));
-        assert_eq!(parse_version("1.2.0-alpha+xyz"), Some((1, 2, 0)));
+        assert!(server_version_warnings("1.0.0-beta.1").is_empty());
+        assert_eq!(parse_version("v1.0.0"), Some((1, 0, 0)));
+        assert_eq!(parse_version("1.0.0-alpha+xyz"), Some((1, 0, 0)));
     }
 
     #[test]
@@ -1183,7 +1182,7 @@ mod tests {
     fn failed_reprobe_keeps_last_known_version() {
         let probe = CachedProbe {
             ok: true,
-            version: "1.2.0".into(),
+            version: "1.0.0".into(),
             capabilities: HashMap::from([("kiosk_allowed".into(), true)]),
             latest_version: None,
             update_available: false,
@@ -1192,7 +1191,7 @@ mod tests {
         };
         let merged = apply_probe(Some(probe.clone()), unreachable_probe());
         assert!(!merged.ok);
-        assert_eq!(merged.version, "1.2.0");
+        assert_eq!(merged.version, "1.0.0");
         assert!(merged.capabilities["kiosk_allowed"]);
         assert!(merged.checked_at >= 1);
         let fresh = apply_probe(Some(probe.clone()), probe.clone());

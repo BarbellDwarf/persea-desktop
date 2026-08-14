@@ -224,7 +224,7 @@ mod tests {
     fn app_identity_is_locked_to_the_d01_decisions() {
         let cfg = load_config();
         assert_eq!(cfg.product_name, "Persea Desktop");
-        assert_eq!(cfg.version, "1.2.0");
+        assert_eq!(cfg.version, "1.0.0");
         assert_eq!(cfg.identifier, "dev.persea.desktop");
         assert_eq!(cfg.build.frontend_dist, "../shell");
     }

@@ -63,7 +63,7 @@ Element fullscreen (the web page calling `requestFullscreen` for video
 or media, which the remote UI's own fullscreen button uses) is a
 different mechanism: WKWebView needs a private API (`fullScreenEnabled`)
 that is gated behind the `macos-private-api` Tauri feature, which is
-**not enabled** in 1.2.0. If a page's element fullscreen does nothing,
+**not enabled** in 1.0.0. If a page's element fullscreen does nothing,
 use the shell fullscreen instead. Enabling the feature is a one-line
 `Cargo.toml` change (add the `macos-private-api` feature to the `tauri`
 dependency) plus a rebuild; it was deferred because private APIs are

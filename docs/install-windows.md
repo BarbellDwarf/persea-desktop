@@ -49,8 +49,8 @@ survive.
 
 Two channels exist:
 
-- **Stable**: the Releases page. Version numbers like `1.2.0`.
-- **Beta**: the beta pre-release, versioned `1.2.0-beta.<run number>`.
+- **Stable**: the Releases page. Version numbers like `1.0.0`.
+- **Beta**: the beta pre-release, versioned `1.0.0-beta.<run number>`.
   Beta installers come from the same download page. The beta release
   is rebuilt frequently and its download links are only valid between
   builds.

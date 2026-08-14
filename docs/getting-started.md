@@ -9,10 +9,10 @@ This guide walks you from a fresh install to your first session.
 
 ## What you need
 
-- A persea server. Version 1.2.0 or newer unlocks the full desktop
-  feature set (device pairing, session events, the capability probe).
-  The drive API used by file transfers exists from server 1.1.1. The
-  About section in the app's Settings shows the minimum versions.
+- A persea server. Version 1.0.0 unlocks the full desktop
+  feature set (device pairing, session events, the capability probe,
+  and the drive API used by file transfers). The About section in the
+  app's Settings shows the minimum version.
 - The Persea Desktop app, installed for your operating system:
 
   | OS | Install guide |

@@ -55,7 +55,7 @@
 //! hit Reconnect. A reconnect (session-ready) or a manual close cancels
 //! the effect. Transient disconnects never schedule anything.
 //!
-//! ## Terminate semantics (honest v1.2.0)
+//! ## Terminate semantics
 //!
 //! Terminating a session server-side needs an authenticated
 //! `DELETE /api/sessions/<id>`, which requires the paired API token
