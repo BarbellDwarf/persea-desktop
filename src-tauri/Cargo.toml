@@ -6,8 +6,8 @@ authors = ["Persea Contributors"]
 edition = "2021"
 rust-version = "1.88"
 license = "Apache-2.0"
-repository = "https://github.com/BarbellDwarf/persea-desktop"
-homepage = "https://github.com/BarbellDwarf/persea-desktop"
+repository = "https://github.com/persea-grove/persea-desktop"
+homepage = "https://github.com/persea-grove/persea-desktop"
 keywords = ["remote-desktop", "guacamole", "persea", "tauri"]
 categories = ["command-line-utilities"]
 
