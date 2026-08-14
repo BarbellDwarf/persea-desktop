@@ -237,7 +237,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
     let help = Submenu::with_id(app, "Help", "Help", true)?;
     help.append_items(&[&docs, &about])?;
 
-    let mut items: Vec<&dyn IsMenuItem<tauri::Wry>> = Vec::new();
+    let menu = Menu::new(app)?;
     #[cfg(target_os = "macos")]
     {
         // The standard app menu: About, separator, Quit. The system
@@ -255,13 +255,10 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         let quit = PredefinedMenuItem::quit(app, None)?;
         let app_menu = Submenu::with_id(app, "Persea Desktop", "Persea Desktop", true)?;
         app_menu.append_items(&[&about, &sep, &quit])?;
-        items.push(&app_menu);
+        menu.append_items(&[&app_menu])?;
     }
-    items.push(&file);
-    items.push(&edit);
-    items.push(&view);
-    items.push(&help);
-    Menu::with_items(app, &items)
+    menu.append_items(&[&file, &edit, &view, &help])?;
+    Ok(menu)
 }
 
 fn handle_menu_event(app: &tauri::AppHandle, id: &str) {
@@ -270,7 +267,7 @@ fn handle_menu_event(app: &tauri::AppHandle, id: &str) {
         ID_CLOSE_TAB => close_active_tab(),
         ID_FULLSCREEN => toggle_main_fullscreen(app),
         ID_TOGGLE_TABS => toggle_tab_strip(),
-        ID_DOCS => open_docs(app),
+        ID_DOCS => open_docs(),
         ID_QUIT => app.exit(0),
         // Everything else (tab context menu ids, tray ids) belongs to
         // other owners.
@@ -322,10 +319,10 @@ fn toggle_tab_strip() {
     crate::windows::set_strip_visible(!crate::windows::strip_visible());
 }
 
-fn open_docs(app: &tauri::AppHandle) {
+fn open_docs() {
     let Some(instance) = default_instance() else {
         return;
     };
     let base = instance.url.trim_end_matches('/');
-    let _ = tauri_plugin_opener::open_url(&format!("{base}/docs"), None::<&str>);
+    let _ = tauri_plugin_opener::open_url(format!("{base}/docs"), None::<&str>);
 }
