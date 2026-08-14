@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-transfer-download"
+description = "Enables the cmd_transfer_download command without any pre-configured scope."
+commands.allow = ["cmd_transfer_download"]
+
+[[permission]]
+identifier = "deny-cmd-transfer-download"
+description = "Denies the cmd_transfer_download command without any pre-configured scope."
+commands.deny = ["cmd_transfer_download"]

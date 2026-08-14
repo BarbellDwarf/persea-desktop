@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pairing-supported"
+description = "Enables the pairing_supported command without any pre-configured scope."
+commands.allow = ["pairing_supported"]
+
+[[permission]]
+identifier = "deny-pairing-supported"
+description = "Denies the pairing_supported command without any pre-configured scope."
+commands.deny = ["pairing_supported"]

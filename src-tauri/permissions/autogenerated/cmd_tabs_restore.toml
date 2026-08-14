@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-tabs-restore"
+description = "Enables the cmd_tabs_restore command without any pre-configured scope."
+commands.allow = ["cmd_tabs_restore"]
+
+[[permission]]
+identifier = "deny-cmd-tabs-restore"
+description = "Denies the cmd_tabs_restore command without any pre-configured scope."
+commands.deny = ["cmd_tabs_restore"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-shell-set-gpu-acceleration"
+description = "Enables the cmd_shell_set_gpu_acceleration command without any pre-configured scope."
+commands.allow = ["cmd_shell_set_gpu_acceleration"]
+
+[[permission]]
+identifier = "deny-cmd-shell-set-gpu-acceleration"
+description = "Denies the cmd_shell_set_gpu_acceleration command without any pre-configured scope."
+commands.deny = ["cmd_shell_set_gpu_acceleration"]

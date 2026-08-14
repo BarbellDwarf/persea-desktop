@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-tabs-prev"
+description = "Enables the cmd_tabs_prev command without any pre-configured scope."
+commands.allow = ["cmd_tabs_prev"]
+
+[[permission]]
+identifier = "deny-cmd-tabs-prev"
+description = "Denies the cmd_tabs_prev command without any pre-configured scope."
+commands.deny = ["cmd_tabs_prev"]

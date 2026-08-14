@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-tabs-expand"
+description = "Enables the cmd_tabs_expand command without any pre-configured scope."
+commands.allow = ["cmd_tabs_expand"]
+
+[[permission]]
+identifier = "deny-cmd-tabs-expand"
+description = "Denies the cmd_tabs_expand command without any pre-configured scope."
+commands.deny = ["cmd_tabs_expand"]

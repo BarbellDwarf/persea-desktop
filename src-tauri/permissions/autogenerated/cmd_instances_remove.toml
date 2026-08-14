@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-instances-remove"
+description = "Enables the cmd_instances_remove command without any pre-configured scope."
+commands.allow = ["cmd_instances_remove"]
+
+[[permission]]
+identifier = "deny-cmd-instances-remove"
+description = "Denies the cmd_instances_remove command without any pre-configured scope."
+commands.deny = ["cmd_instances_remove"]

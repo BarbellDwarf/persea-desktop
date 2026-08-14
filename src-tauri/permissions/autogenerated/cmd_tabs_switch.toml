@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-tabs-switch"
+description = "Enables the cmd_tabs_switch command without any pre-configured scope."
+commands.allow = ["cmd_tabs_switch"]
+
+[[permission]]
+identifier = "deny-cmd-tabs-switch"
+description = "Denies the cmd_tabs_switch command without any pre-configured scope."
+commands.deny = ["cmd_tabs_switch"]

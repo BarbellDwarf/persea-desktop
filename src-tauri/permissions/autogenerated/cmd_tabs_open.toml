@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-tabs-open"
+description = "Enables the cmd_tabs_open command without any pre-configured scope."
+commands.allow = ["cmd_tabs_open"]
+
+[[permission]]
+identifier = "deny-cmd-tabs-open"
+description = "Denies the cmd_tabs_open command without any pre-configured scope."
+commands.deny = ["cmd_tabs_open"]

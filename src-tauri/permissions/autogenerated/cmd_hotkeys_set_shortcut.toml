@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-hotkeys-set-shortcut"
+description = "Enables the cmd_hotkeys_set_shortcut command without any pre-configured scope."
+commands.allow = ["cmd_hotkeys_set_shortcut"]
+
+[[permission]]
+identifier = "deny-cmd-hotkeys-set-shortcut"
+description = "Denies the cmd_hotkeys_set_shortcut command without any pre-configured scope."
+commands.deny = ["cmd_hotkeys_set_shortcut"]

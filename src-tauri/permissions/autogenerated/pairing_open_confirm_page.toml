@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pairing-open-confirm-page"
+description = "Enables the pairing_open_confirm_page command without any pre-configured scope."
+commands.allow = ["pairing_open_confirm_page"]
+
+[[permission]]
+identifier = "deny-pairing-open-confirm-page"
+description = "Denies the pairing_open_confirm_page command without any pre-configured scope."
+commands.deny = ["pairing_open_confirm_page"]

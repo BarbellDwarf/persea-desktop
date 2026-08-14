@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-instances-probe"
+description = "Enables the cmd_instances_probe command without any pre-configured scope."
+commands.allow = ["cmd_instances_probe"]
+
+[[permission]]
+identifier = "deny-cmd-instances-probe"
+description = "Denies the cmd_instances_probe command without any pre-configured scope."
+commands.deny = ["cmd_instances_probe"]
