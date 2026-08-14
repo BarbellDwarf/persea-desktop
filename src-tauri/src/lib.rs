@@ -113,6 +113,7 @@ pub fn run() {
                 builder = builder.devtools(false);
             }
             let builder = windows::lock_viewport_builder(builder, app.handle().clone());
+            #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
             let main = builder.build()?;
 
             // Linux: the tray and the in-window menu bar are unreliable
