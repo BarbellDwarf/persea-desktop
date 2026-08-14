@@ -22,12 +22,20 @@ mod windows;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(notify::updater_plugin())
+        .plugin(notify::updater_plugin());
+
+    // Embedded WebDriver server for the E2E suite (macOS leg). Debug
+    // builds only: release binaries never register it, so the server
+    // never starts there.
+    #[cfg(debug_assertions)]
+    let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
+
+    builder
         .setup(|app| {
             // Provisioning BEFORE the instance store: the merge consumes
             // the resolved provision document, and the store's startup
