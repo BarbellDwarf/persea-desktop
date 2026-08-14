@@ -86,7 +86,8 @@ pub fn run() {
                     .center()
                     .initialization_script(bridge::init_script());
             if !automation {
-                let (store_id, data_dir) = windows::instance_webview_data(app.handle(), &default_url);
+                let (store_id, data_dir) =
+                    windows::instance_webview_data(app.handle(), &default_url);
                 builder = builder.data_directory(data_dir);
                 if let Some(id) = store_id {
                     builder = builder.data_store_identifier(id);
