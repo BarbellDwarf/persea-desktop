@@ -48,6 +48,9 @@ use url::Url;
 use crate::transfer;
 use crate::windows;
 
+#[cfg(target_os = "linux")]
+use gtk::prelude::WidgetExt;
+
 /// The drop-zone overlay window label.
 pub const DROPZONE_WINDOW_LABEL: &str = "dropzone";
 /// Poll cadence for attaching handlers to newly created windows and
@@ -254,11 +257,46 @@ fn position_overlay(win: &WebviewWindow, position: PhysicalPosition<f64>) {
         let _ = overlay.set_position(PhysicalPosition::new(x, y));
         if !overlay.is_visible().unwrap_or(false) {
             let _ = overlay.show();
-            // Window is realized now; safe to ignore cursor events (see
-            // the setup comment about tao#1178).
-            let _ = overlay.set_ignore_cursor_events(true);
+            // Safe to ignore cursor events once the window is realized;
+            // the request is deferred on Linux until the GdkWindow
+            // exists (see the setup comment about tao#1178).
+            apply_ignore_cursor_events(&overlay, &thread_app, 20);
         }
     });
+}
+
+/// Ask tao to ignore cursor events on the overlay once its GdkWindow
+/// exists. The tao request is processed in the main loop and panics
+/// when the GTK window is not realized (`window.window()` is None,
+/// tao#1178); on Wayland `show()` returns before realization finishes,
+/// so poll briefly for the GdkWindow before sending the request.
+/// Best-effort: when the polls run out the overlay keeps capturing
+/// cursor events, and Wayland drops still resolve via LAST_TARGET.
+fn apply_ignore_cursor_events(overlay: &WebviewWindow, app: &AppHandle, retries: u32) {
+    #[cfg(target_os = "linux")]
+    {
+        let realized = overlay
+            .gtk_window()
+            .map(|win| win.window().is_some())
+            .unwrap_or(false);
+        if !realized {
+            if retries > 0 {
+                let app = app.clone();
+                let thread_app = app.clone();
+                let label = overlay.label().to_string();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(50));
+                    let _ = app.run_on_main_thread(move || {
+                        if let Some(win) = thread_app.get_webview_window(&label) {
+                            apply_ignore_cursor_events(&win, &thread_app, retries - 1);
+                        }
+                    });
+                });
+            }
+            return;
+        }
+    }
+    let _ = overlay.set_ignore_cursor_events(true);
 }
 
 fn hide_overlay() {

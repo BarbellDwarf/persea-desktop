@@ -3814,6 +3814,7 @@ dependencies = [
  "core-foundation",
  "core-graphics 0.24.0",
  "db-keystore",
+ "gtk",
  "keyring-core",
  "linux-keyutils-keyring-store",
  "notify-rust",
