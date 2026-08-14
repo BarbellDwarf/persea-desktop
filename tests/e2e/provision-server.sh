@@ -60,7 +60,12 @@ done
 
 echo "[provision] completing first-run setup (admin user)..."
 ADMIN_PASSWORD="${PERSEA_E2E_ADMIN_PASSWORD:-e2e-admin-password-12345}"
-SETUP_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1:$PORT/setup" \
+CSRF_JAR="$WORK/csrf.cookies"
+curl -fsS -c "$CSRF_JAR" "http://127.0.0.1:$PORT/setup" >/dev/null 2>&1
+CSRF_TOKEN=$(grep csrf_token "$CSRF_JAR" | awk '{print $7}')
+[ -n "$CSRF_TOKEN" ] || { echo "could not obtain csrf token" >&2; exit 1; }
+SETUP_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -b "$CSRF_JAR" \
+  -H "X-CSRF-Token: $CSRF_TOKEN" -X POST "http://127.0.0.1:$PORT/setup" \
   --data-urlencode "listen_addr=127.0.0.1:$PORT" \
   --data-urlencode "db_path=$DB" \
   --data-urlencode "db_url=" \
