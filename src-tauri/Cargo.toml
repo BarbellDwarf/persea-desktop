@@ -46,3 +46,6 @@ x11rb = { version = "0.14", features = ["allow-unsafe-code"] }
 zbus-secret-service-keyring-store = { version = "1.0.0", features = ["rt-tokio-crypto-rust"] }
 linux-keyutils-keyring-store = "1.0.0"
 db-keystore = "0.4.3"
+
+[target."cfg(debug_assertions)".dependencies]
+tauri-plugin-wdio-webdriver = "1"
