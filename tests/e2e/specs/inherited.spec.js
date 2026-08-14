@@ -32,6 +32,18 @@ module.exports = async function () {
     await screenshot(driver, "web-docs");
 
     console.log("inherited: login + docs render checks verified");
+  } catch (err) {
+    try {
+      const text = await driver.executeScript(
+        "return (document.body && document.body.innerText || '').slice(0, 500)",
+      );
+      const url = await driver.getCurrentUrl();
+      console.error(`viewport text: ${JSON.stringify(text)}`);
+      console.error(`viewport url: ${url}`);
+    } catch (diagErr) {
+      console.error(`diag failed: ${diagErr.message}`);
+    }
+    throw err;
   } finally {
     await driver.quit();
   }
