@@ -31,7 +31,7 @@ function escapeHtml(value) {
 
 async function appVersion() {
   try {
-    const v = await invoke("app_version");
+    const v = await invoke("cmd_app_version");
     return typeof v === "string" && v ? v : APP_VERSION_FALLBACK;
   } catch {
     return APP_VERSION_FALLBACK;
@@ -78,7 +78,7 @@ function initTheme() {
   }
 
   apply();
-  invoke("shell_get_settings")
+  invoke("cmd_shell_get_settings")
     .then((s) => {
       if (s && s.appearance) {
         setting = s.appearance;
@@ -148,7 +148,7 @@ function renderProbeSummary(container, inst) {
   container.innerHTML = parts.join("");
   container.querySelector("[data-open-setup]")?.addEventListener("click", (e) => {
     e.preventDefault();
-    invoke("instances_open_setup", { url: e.currentTarget.dataset.openSetup }).catch(() => {});
+    invoke("cmd_instances_open_setup", { url: e.currentTarget.dataset.openSetup }).catch(() => {});
   });
 }
 
@@ -194,12 +194,12 @@ function wireWelcome() {
     const url = form.elements.url.value.trim();
     probe.innerHTML = '<p class="probe-pending">Checking server…</p>';
     openBtn.classList.add("hidden");
-    invoke("instances_add", { name, url })
+    invoke("cmd_instances_add", { name, url })
       .then((inst) => {
         renderProbeSummary(probe, inst);
         openBtn.classList.remove("hidden");
         openBtn.addEventListener("click", () => {
-          invoke("instances_open", { url: inst.url }).catch(() => {});
+          invoke("cmd_instances_open", { url: inst.url }).catch(() => {});
         });
       })
       .catch((err) => {
@@ -213,14 +213,14 @@ async function initWelcomePage() {
   if (!welcome) return; // settings page, nothing to do here
   let instances = [];
   try {
-    instances = await invoke("instances_list");
+    instances = await invoke("cmd_instances_list");
   } catch {
     instances = [];
   }
   if (instances.length) {
     // Rust auto-opens the default/last instance at startup; this branch
     // covers a manual return to the shell page.
-    invoke("instances_open_default").catch(() => wireWelcome());
+    invoke("cmd_instances_open_default").catch(() => wireWelcome());
   } else {
     wireWelcome();
   }

@@ -114,7 +114,7 @@
     close.setAttribute("aria-label", "Close tab " + (tab.title || tab.id));
     close.addEventListener("click", (event) => {
       event.stopPropagation();
-      invoke("tabs_close", { id: tab.id }).catch(() => {});
+      invoke("cmd_tabs_close", { id: tab.id }).catch(() => {});
     });
     el.appendChild(close);
     return el;
@@ -173,7 +173,7 @@
       if (!OVERFLOW.classList.contains("hidden")) {
         // Re-measure while open: the window follows the list height.
         const height = Math.min(OVERFLOW.scrollHeight || 120, 320);
-        invoke("tabs_overflow", { open: true, height }).catch(() => {});
+        invoke("cmd_tabs_overflow", { open: true, height }).catch(() => {});
       }
     } else {
       OVERFLOW.textContent = "";
@@ -184,7 +184,7 @@
   }
 
   function activate(id) {
-    invoke("tabs_switch", { id }).catch(() => {});
+    invoke("cmd_tabs_switch", { id }).catch(() => {});
   }
 
   function focusTab(index) {
@@ -204,7 +204,7 @@
       // Grow the strip window so the popover is visible below the
       // 44 px tab row.
       const height = Math.min(OVERFLOW.scrollHeight || 120, 320);
-      invoke("tabs_overflow", { open: true, height }).catch(() => {});
+      invoke("cmd_tabs_overflow", { open: true, height }).catch(() => {});
       OVERFLOW.firstElementChild && OVERFLOW.firstElementChild.focus();
     } else {
       closeOverflowList();
@@ -215,7 +215,7 @@
     if (!OVERFLOW.classList.contains("hidden")) {
       OVERFLOW.classList.add("hidden");
       OVERFLOW_BTN.setAttribute("aria-expanded", "false");
-      invoke("tabs_overflow", { open: false }).catch(() => {});
+      invoke("cmd_tabs_overflow", { open: false }).catch(() => {});
     }
   }
 
@@ -224,7 +224,7 @@
     event.stopPropagation();
     // Strip-relative cursor position (logical px); the Rust side shows
     // the native menu there.
-    invoke("tabs_context_menu", { id: tab.id, x: event.clientX, y: event.clientY }).catch(() => {});
+    invoke("cmd_tabs_context_menu", { id: tab.id, x: event.clientX, y: event.clientY }).catch(() => {});
   }
 
   /* ---------------------------------------------------------------- */
@@ -277,8 +277,8 @@
     }
     if (mod && event.key === "Tab") {
       event.preventDefault();
-      if (event.shiftKey) invoke("tabs_prev").catch(() => {});
-      else invoke("tabs_next").catch(() => {});
+      if (event.shiftKey) invoke("cmd_tabs_prev").catch(() => {});
+      else invoke("cmd_tabs_next").catch(() => {});
       return;
     }
     if (event.key === "Escape") {
@@ -304,7 +304,7 @@
     render();
   }
 
-  invoke("tabs_list")
+  invoke("cmd_tabs_list")
     .then(onTabsChanged)
     .catch(() => {});
 

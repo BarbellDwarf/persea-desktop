@@ -104,7 +104,7 @@ function renderInstanceRow(inst) {
   defRadio.disabled = inst.locked;
   defRadio.setAttribute("aria-label", "Set " + inst.name + " as the default server");
   defRadio.addEventListener("change", () => {
-    invoke("instances_set_default", { url: inst.url })
+    invoke("cmd_instances_set_default", { url: inst.url })
       .then(() => reloadInstances())
       .catch((err) => alert("Could not set default: " + err));
   });
@@ -121,7 +121,7 @@ function renderInstanceRow(inst) {
   main.insertAdjacentHTML("beforeend", statusBlock(inst));
   main.querySelector("[data-open-setup]")?.addEventListener("click", (e) => {
     e.preventDefault();
-    invoke("instances_open_setup", { url: e.currentTarget.dataset.openSetup }).catch(() => {});
+    invoke("cmd_instances_open_setup", { url: e.currentTarget.dataset.openSetup }).catch(() => {});
   });
   row.appendChild(main);
 
@@ -133,7 +133,7 @@ function renderInstanceRow(inst) {
   openBtn.className = "btn btn-accent";
   openBtn.textContent = "Open";
   openBtn.addEventListener("click", () => {
-    invoke("instances_open", { url: inst.url }).catch((err) => alert("Could not open: " + err));
+    invoke("cmd_instances_open", { url: inst.url }).catch((err) => alert("Could not open: " + err));
   });
   actions.appendChild(openBtn);
 
@@ -144,7 +144,7 @@ function renderInstanceRow(inst) {
   recheckBtn.addEventListener("click", () => {
     recheckBtn.disabled = true;
     recheckBtn.textContent = "Checking…";
-    invoke("instances_probe", { url: inst.url })
+    invoke("cmd_instances_probe", { url: inst.url })
       .then(() => reloadInstances())
       .catch((err) => alert("Probe failed: " + err))
       .finally(() => {
@@ -170,7 +170,7 @@ function renderInstanceRow(inst) {
       if (!confirm("Remove the server \"" + inst.name + "\" from this app? Its stored login is left on disk.")) {
         return;
       }
-      invoke("instances_remove", { url: inst.url })
+      invoke("cmd_instances_remove", { url: inst.url })
         .then(() => reloadInstances())
         .catch((err) => alert("Could not remove: " + err));
     });
@@ -184,7 +184,7 @@ function renderInstanceRow(inst) {
 async function reloadInstances() {
   let instances = [];
   try {
-    instances = await invoke("instances_list");
+    instances = await invoke("cmd_instances_list");
   } catch {
     instances = [];
   }
@@ -234,9 +234,9 @@ instanceForm.addEventListener("submit", async (event) => {
   saveBtn.disabled = true;
   try {
     if (instanceForm.dataset.mode === "edit" && editingUrl) {
-      await invoke("instances_update", { url: editingUrl, name, newUrl: url });
+      await invoke("cmd_instances_update", { url: editingUrl, name, newUrl: url });
     } else {
-      await invoke("instances_add", { name, url });
+      await invoke("cmd_instances_add", { name, url });
     }
     dialog.close();
     await reloadInstances();
@@ -266,7 +266,7 @@ function applyAppearanceSetting(appearance) {
 async function initAppearance() {
   let settings = null;
   try {
-    settings = await invoke("shell_get_settings");
+    settings = await invoke("cmd_shell_get_settings");
   } catch {
     settings = null;
   }
@@ -276,7 +276,7 @@ async function initAppearance() {
     const value = event.target.value;
     if (!value) return;
     applyAppearanceSetting(value);
-    invoke("shell_set_appearance", { appearance: value }).catch(() => {});
+    invoke("cmd_shell_set_appearance", { appearance: value }).catch(() => {});
   });
 }
 
@@ -364,7 +364,7 @@ function renderShortcutRow(entry, editable) {
   const save = async () => {
     saveBtn.disabled = true;
     try {
-      const view = await invoke("hotkeys_set_shortcut", {
+      const view = await invoke("cmd_hotkeys_set_shortcut", {
         id: entry.id,
         shortcut: input.value.trim(),
       });
@@ -423,7 +423,7 @@ async function initShortcuts() {
   if (!listEl) return;
   let view = null;
   try {
-    view = await invoke("hotkeys_get_settings");
+    view = await invoke("cmd_hotkeys_get_settings");
   } catch {
     view = null;
   }
@@ -443,7 +443,7 @@ async function initGpuAcceleration() {
   if (!toggle) return;
   let settings = null;
   try {
-    settings = await invoke("shell_get_settings");
+    settings = await invoke("cmd_shell_get_settings");
   } catch {
     return;
   }
@@ -451,7 +451,7 @@ async function initGpuAcceleration() {
   toggle.checked = settings && settings.gpuAcceleration !== false;
   toggle.addEventListener("change", async () => {
     try {
-      await invoke("shell_set_gpu_acceleration", { enabled: toggle.checked });
+      await invoke("cmd_shell_set_gpu_acceleration", { enabled: toggle.checked });
     } catch (err) {
       toggle.checked = !toggle.checked;
       alert("Failed to update hardware acceleration: " + err);
@@ -472,7 +472,7 @@ async function initHeader() {
   const openDefault = document.getElementById("btn-open-default");
   if (!openDefault) return;
   openDefault.addEventListener("click", () => {
-    invoke("instances_open_default").catch((err) => alert("No server to open: " + err));
+    invoke("cmd_instances_open_default").catch((err) => alert("No server to open: " + err));
   });
 }
 

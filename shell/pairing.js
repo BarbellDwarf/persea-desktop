@@ -50,7 +50,7 @@ async function resolveInstance() {
   const wanted = queryInstanceUrl();
   let instances = [];
   try {
-    instances = await invoke("instances_list");
+    instances = await invoke("cmd_instances_list");
   } catch {
     instances = [];
   }

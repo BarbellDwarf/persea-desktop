@@ -149,21 +149,21 @@
     if (t.canRetry) {
       actions.appendChild(
         actionButton("Retry", "Retry " + (t.remoteName || ""), () => {
-          invoke("transfer_retry", { id: t.id }).catch(() => {});
+          invoke("cmd_transfer_retry", { id: t.id }).catch(() => {});
         })
       );
     }
     if (t.canSaveAs) {
       actions.appendChild(
         actionButton("Save as", "Download " + (t.remoteName || "") + " with a save dialog", () => {
-          invoke("transfer_download", { url: t.sourceUrl }).catch(() => {});
+          invoke("cmd_transfer_download", { url: t.sourceUrl }).catch(() => {});
         })
       );
     }
     if (t.canOpenFolder) {
       actions.appendChild(
         actionButton("Open folder", "Show the file in the file manager", () => {
-          invoke("transfer_open_folder", { id: t.id }).catch(() => {});
+          invoke("cmd_transfer_open_folder", { id: t.id }).catch(() => {});
         })
       );
     }
@@ -210,7 +210,7 @@
   }
 
   CLEAR.addEventListener("click", () => {
-    invoke("transfer_clear_finished").catch(() => {});
+    invoke("cmd_transfer_clear_finished").catch(() => {});
   });
 
   function onTransfersChanged(payload) {
@@ -218,7 +218,7 @@
     render();
   }
 
-  invoke("transfers_list")
+  invoke("cmd_transfers_list")
     .then(onTransfersChanged)
     .catch(() => {});
 
