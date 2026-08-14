@@ -11,6 +11,7 @@ mod kiosk;
 mod navigation;
 mod notify;
 mod pairing;
+mod platform;
 mod poller;
 mod provisioning;
 mod shell_config;
@@ -35,6 +36,10 @@ pub fn run() {
 
             // Theme first: shell pages render with it.
             shell_config::setup(app)?;
+
+            // GPU env before any webview exists: with the toggle OFF this
+            // exports the WebKitGTK software fallback variables on Linux.
+            platform::apply_gpu_env();
 
             // Instance store BEFORE the window policy: the navigation
             // allowlist and the initial URL both need the loaded store.
@@ -76,6 +81,10 @@ pub fn run() {
                     .center()
                     .initialization_script(bridge::init_script())
                     .data_directory(data_dir);
+            let builder = match platform::webview2_gpu_args() {
+                Some(args) => builder.additional_browser_args(args),
+                None => builder,
+            };
             let builder = if kiosk::is_active() {
                 builder.devtools(false)
             } else {
@@ -96,6 +105,10 @@ pub fn run() {
             // Session window/tab manager: needs the main window to exist
             // (it builds the tabstrip window and session windows).
             windows::setup(app)?;
+
+            // App menu bar after the window manager (Close Tab / Toggle
+            // Tabs reach the tab manager; skipped in kiosk mode).
+            platform::setup_menu(app)?;
 
             // Kiosk entry after the window manager is up (the strip must
             // exist to be hidden).
@@ -134,6 +147,7 @@ pub fn run() {
             instances::cmd_instances_open_setup,
             shell_config::cmd_shell_get_settings,
             shell_config::cmd_shell_set_appearance,
+            shell_config::cmd_shell_set_gpu_acceleration,
             shell_config::cmd_app_version,
             keyring::keyring_set,
             keyring::keyring_get,
