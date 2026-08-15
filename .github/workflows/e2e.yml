@@ -27,7 +27,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -120,7 +120,7 @@ jobs:
       - name: Open a regeneration PR
         if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           add-paths: docs/screenshots
           branch: screenshots/regen
