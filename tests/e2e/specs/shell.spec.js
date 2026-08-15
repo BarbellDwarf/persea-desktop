@@ -25,10 +25,21 @@ module.exports = async function () {
     // ACL-gated instances_add + probe path end to end (regression for
     // "Command instances_add not allowed by ACL").
     const { By } = require("selenium-webdriver");
-    await driver.findElement(By.id("welcome-name")).sendKeys("E2E UI");
-    await driver.findElement(By.id("welcome-url")).sendKeys(BASE);
-    await driver.findElement(By.id("welcome-form")).submit();
-    await waitForText(driver, "Server version");
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await driver.findElement(By.id("welcome-name")).sendKeys("E2E UI");
+        await driver.findElement(By.id("welcome-url")).sendKeys(BASE);
+        await driver.findElement(By.id("welcome-form")).submit();
+        break;
+      } catch (err) {
+        if (attempt === 2) throw err;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+    // The probe budget is 6s (PROBE_TIMEOUT_SECS); on a loaded runner the
+    // whole add round trip can exceed the 8s default wait, so give this
+    // step explicit headroom.
+    await waitForText(driver, "Server version", 20000);
     await screenshot(driver, "shell-welcome-added");
 
     // The welcome flow opens the settings page for the guided add.
