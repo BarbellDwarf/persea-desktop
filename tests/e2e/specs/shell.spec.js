@@ -28,7 +28,15 @@ module.exports = async function () {
     await driver.findElement(By.id("welcome-name")).sendKeys("E2E UI");
     await driver.findElement(By.id("welcome-url")).sendKeys(BASE);
     await driver.findElement(By.id("welcome-form")).submit();
-    await waitForText(driver, "Server version");
+    try {
+      await waitForText(driver, "Server version", 20000);
+    } catch (err) {
+      const probeText = await driver
+        .executeScript("return (document.getElementById('welcome-probe')?.innerText || 'NO PROBE EL').slice(0, 500)")
+        .catch(() => "EVAL FAILED");
+      console.log("DIAG welcome-probe:", JSON.stringify(probeText));
+      throw err;
+    }
     await screenshot(driver, "shell-welcome-added");
 
     // The welcome flow opens the settings page for the guided add.
