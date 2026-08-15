@@ -28,7 +28,10 @@ module.exports = async function () {
     await driver.findElement(By.id("welcome-name")).sendKeys("E2E UI");
     await driver.findElement(By.id("welcome-url")).sendKeys(BASE);
     await driver.findElement(By.id("welcome-form")).submit();
-    await waitForText(driver, "Server version");
+    // The probe budget is 6s (PROBE_TIMEOUT_SECS); on a loaded runner the
+    // whole add round trip can exceed the 8s default wait, so give this
+    // step explicit headroom.
+    await waitForText(driver, "Server version", 20000);
     await screenshot(driver, "shell-welcome-added");
 
     // The welcome flow opens the settings page for the guided add.
