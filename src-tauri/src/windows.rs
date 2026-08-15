@@ -546,7 +546,7 @@ impl TabState {
         if was_active {
             let home = viewport_home(&self.tabs, &self.home);
             self.expected
-                .insert((MAIN_WINDOW_LABEL.to_string(), home.clone()));
+                .insert((MAIN_WINDOW_LABEL.to_string(), settled_url(&home)));
             effects.push(Effect::NavigateViewport(home));
         }
         effects
@@ -601,7 +601,7 @@ impl TabState {
                 if was_active {
                     let home = viewport_home(&self.tabs, &self.home);
                     self.expected
-                        .insert((MAIN_WINDOW_LABEL.to_string(), home.clone()));
+                        .insert((MAIN_WINDOW_LABEL.to_string(), settled_url(&home)));
                     effects.push(Effect::NavigateViewport(home));
                 }
             }
@@ -681,6 +681,14 @@ impl TabState {
         self.viewport_url = Some(url.to_string());
         if matches!(url.scheme(), "http" | "https") {
             self.home = Some(instance_origin(url) + "/");
+        }
+        if is_shell_landing(url) {
+            // The shell's own pages and instance roots are targets only
+            // the shell navigates the viewport to (tray instance-open,
+            // Settings, Pairing, the pop-out/expand home departure). A
+            // landing here is not a page-initiated departure: the tab is
+            // a live session the shell left, and stays managed.
+            return Vec::new();
         }
         if let Some(id) = session_id_from_url(url) {
             // Entering a session page.
@@ -942,6 +950,27 @@ fn session_id_from_str(raw: &str) -> Option<String> {
 /// Instance origin (`scheme://host[:port]`) for a session URL.
 fn instance_origin(url: &Url) -> String {
     url.origin().ascii_serialization()
+}
+
+/// The canonical form of a raw navigation target as a settled navigation
+/// reports it: `Url::parse` normalizes away the missing trailing slash.
+fn settled_url(raw: &str) -> String {
+    Url::parse(raw)
+        .map(|u| u.to_string())
+        .unwrap_or_else(|_| raw.to_string())
+}
+
+/// Viewport targets that only the shell navigates to: the app's own
+/// shell pages (`tauri://localhost` on Linux/macOS, `tauri.localhost` on
+/// Windows) and http(s) origin roots (the "Open <instance>" landing). A
+/// settled navigation to one of these is the shell's doing, never a
+/// page-initiated departure, so the session tab must survive it.
+fn is_shell_landing(url: &Url) -> bool {
+    match url.host_str() {
+        Some("localhost") => url.scheme() == "tauri",
+        Some("tauri.localhost") => matches!(url.scheme(), "http" | "https"),
+        _ => matches!(url.scheme(), "http" | "https") && url.path() == "/",
+    }
 }
 
 /// Viewport home: the origin of the last tab's instance, else the first
@@ -2114,6 +2143,12 @@ mod tests {
     fn pop_out_creates_window_and_views_the_departure_as_expected() {
         let mut state = TabState::new(PopMode::Tabs);
         state.open_session(&session_url("persea.example.com", "aaa111"), None);
+        // The viewport settles on the session page first, as in the real
+        // webview flow; without it the departure test is vacuous.
+        state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &session_url("persea.example.com", "aaa111"),
+        );
         let effects = state.pop_out("aaa111");
         assert_eq!(state.view()[0].mode, "popped");
         assert!(effects.iter().any(
@@ -2130,6 +2165,95 @@ mod tests {
         let effects = state.note_navigated(MAIN_WINDOW_LABEL, &url(home));
         assert!(effects.is_empty());
         assert_eq!(tab_ids(&state), vec!["aaa111"]);
+        assert_eq!(state.view()[0].mode, "popped");
+    }
+
+    #[test]
+    fn shell_initiated_home_navigation_keeps_the_session_tab() {
+        let mut state = TabState::new(PopMode::Tabs);
+        state.open_session(&session_url("persea.example.com", "aaa111"), None);
+        state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &session_url("persea.example.com", "aaa111"),
+        );
+        // Tray "Open <instance>" lands the viewport on the instance
+        // root; the tab is a live session, not a view that vanished.
+        let effects = state.note_navigated(MAIN_WINDOW_LABEL, &url("https://persea.example.com/"));
+        assert!(effects.is_empty());
+        assert_eq!(tab_ids(&state), vec!["aaa111"]);
+        assert_eq!(state.view()[0].mode, "inline");
+        assert_eq!(
+            state.viewport_url.as_deref(),
+            Some("https://persea.example.com/")
+        );
+    }
+
+    #[test]
+    fn shell_page_navigations_keep_the_session_tab() {
+        let mut state = TabState::new(PopMode::Tabs);
+        state.open_session(&session_url("persea.example.com", "aaa111"), None);
+        state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &session_url("persea.example.com", "aaa111"),
+        );
+        // Tray Settings and Pairing navigate to the app's own pages.
+        let effects =
+            state.note_navigated(MAIN_WINDOW_LABEL, &url("tauri://localhost/settings.html"));
+        assert!(effects.is_empty());
+        assert_eq!(tab_ids(&state), vec!["aaa111"]);
+        let effects = state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &url("tauri://localhost/pairing.html?url=https%3A%2F%2Fpersea.example.com"),
+        );
+        assert!(effects.is_empty());
+        assert_eq!(tab_ids(&state), vec!["aaa111"]);
+    }
+
+    #[test]
+    fn expand_keeps_the_tab_when_the_viewport_goes_home() {
+        let mut state = TabState::new(PopMode::Tabs);
+        state.open_session(&session_url("persea.example.com", "aaa111"), None);
+        state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &session_url("persea.example.com", "aaa111"),
+        );
+        let target = MonitorTarget {
+            name: Some("DP-1".to_string()),
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let effects = state.expand("aaa111", target);
+        assert!(effects.iter().any(
+            |e| matches!(e, Effect::NavigateViewport(u) if u == "https://persea.example.com")
+        ));
+        assert_eq!(state.view()[0].mode, "expanded");
+        // The follow-up home navigation must NOT remove the tab.
+        let effects = state.note_navigated(MAIN_WINDOW_LABEL, &url("https://persea.example.com/"));
+        assert!(effects.is_empty());
+        assert_eq!(tab_ids(&state), vec!["aaa111"]);
+        assert_eq!(state.view()[0].mode, "expanded");
+    }
+
+    #[test]
+    fn origin_root_landing_closes_the_tab_when_the_session_ends() {
+        let mut state = TabState::new(PopMode::Tabs);
+        state.open_session(&session_url("persea.example.com", "aaa111"), None);
+        state.note_navigated(
+            MAIN_WINDOW_LABEL,
+            &session_url("persea.example.com", "aaa111"),
+        );
+        // The 401 logout lands on the origin root: the tab survives the
+        // navigation, then closes when the server reports the end.
+        state.note_navigated(MAIN_WINDOW_LABEL, &url("https://persea.example.com/"));
+        assert_eq!(tab_ids(&state), vec!["aaa111"]);
+        state.note_session_ended("aaa111");
+        let effects = state.note_auto_close_tick("aaa111");
+        assert!(state.tabs().is_empty());
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, Effect::NavigateViewport(_))));
     }
 
     #[test]
