@@ -12,10 +12,10 @@ Pushing a `v*` tag (for example `v1.0.0`) runs the `Release` workflow:
    - `windows-latest`: msi + nsis
    - `ubuntu-22.04`: deb + rpm + AppImage
    - `macos-latest`: dmg for aarch64, and a second leg cross-compiling the dmg for x86_64
-4. **Smoke**: each leg launches the built binary, waits 15 seconds and verifies the app is still alive (window opened) before its upload counts.
+4. **Smoke**: after the upload, each leg launches the built binary, waits 15 seconds and fails when the app process exited early. A failed leg blocks the publish step, so the release stays a draft; the leg's already-uploaded assets are replaced on the next run.
 5. **Publish**: only when every leg passed, the draft is un-drafted.
 
-The publish step runs after all four legs, so a release missing a platform leg can never ship. A failing gate or leg leaves the release as a draft, which is invisible to users.
+The publish step runs after all four legs, so a release missing a platform leg can never ship. A failing gate or leg leaves the release as a draft, which is invisible to users. The prepare and publish jobs run `actions/checkout` before their `gh release` calls: gh needs a git context.
 
 ## Step by step: cut a release
 
@@ -28,7 +28,7 @@ The publish step runs after all four legs, so a release missing a platform leg c
    git push origin v1.0.0
    ```
 
-4. Watch the `Release` run in Actions. When it finishes, the release page has all six installers (two Windows, three Linux, two macOS dmgs) plus the updater files: a `latest.json` and one `.sig` signature per updater package.
+4. Watch the `Release` run in Actions. When it finishes, the release page has all seven installers (two Windows, three Linux, two macOS dmgs) plus the updater files: a `latest.json` and one `.sig` signature per updater package.
 5. The release notes are auto-generated from merged PRs. Edit the notes after publishing if needed; releases stay editable.
 
 Re-running the workflow for the same tag re-drafts the release, replaces every asset and publishes again.
@@ -44,7 +44,7 @@ Re-running the workflow for the same tag re-drafts the release, replaces every a
 
 ## Updater and signing
 
-The app updates itself from the release's `latest.json` asset. It checks on startup, every 4 hours and on the manual "Check for updates" action in Settings, and offers a Download & restart flow once a newer version is found. The update installs in place: it restarts the app on Windows (NSIS/MSI) and AppImage, swaps the bundle in place on macOS, and re-installs through the package manager on deb/rpm (where a restart comes later). Update check failures are silent and never block the app.
+In v1.1.0 the app updates itself from the release's `latest.json` asset. It checks on startup, every 4 hours and on the manual "Check for updates" action in Settings, and offers a Download & restart flow once a newer version is found. The update installs in place: it restarts the app on Windows (NSIS/MSI) and AppImage, swaps the bundle in place on macOS, and re-installs through the package manager on deb/rpm (where a restart comes later). Update check failures are silent and never block the app.
 
 `bundle.createUpdaterArtifacts` is on in `tauri.conf.json`, so every release also carries the updater artifacts. The workflow injects the signing keys and the tauri-action uploads `latest.json` and every `.sig` alongside the installers.
 

@@ -84,13 +84,17 @@ rm ~/Applications/Persea-Desktop-*.AppImage
 
 Paired device tokens live in your desktop keyring (or a fallback
 store, see [keychain.md](keychain.md)) and are not removed by
-uninstalling. Revoke a device from Settings → Device pairing if you
-want it gone.
+uninstalling. Revoke a device from Settings → Device pairing
+(v1.1.0), or from the tray's server menu → **Pair this device…**, if
+you want it gone.
 
 ## Updates and channels
 
-There is no automatic updater yet. To update, install the newer
-package over the current one; your servers and pairing survive.
+The app checks for updates automatically (on startup and every 4
+hours). In v1.1.0, Settings → Updates adds the manual **Check for
+updates** and **Download & restart** actions. To update manually,
+install the newer package over the current one; your servers and
+pairing survive.
 
 Two channels exist:
 
@@ -99,10 +103,10 @@ Two channels exist:
   downloadable from the same page. The beta release is rebuilt
   frequently and its download links are only valid between builds.
 
-Installing a beta moves you to the beta channel: once the automatic
-updater ships, beta installs will keep updating from the beta channel.
-Leaving the beta channel means installing the stable package, which
-updates from stable from then on. See [beta.md](beta.md).
+Installing a beta moves you to the beta channel: beta installs update
+from the beta channel through the updater. Leaving the beta channel
+means installing the stable package, which updates from stable from
+then on. See [beta.md](beta.md).
 
 ## Linux-specific notes
 

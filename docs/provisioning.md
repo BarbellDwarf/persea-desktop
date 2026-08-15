@@ -159,7 +159,8 @@ version, capabilities) in the normal background pass.
 
 ## Build-time bake flow
 
-`scripts/package.sh --provision <file>`:
+The bake is a packaging-side step (a `scripts/package.sh --provision
+<file>` helper, not yet in the tree, will implement it):
 
 1. Validate `<file>` with the same rules the shell applies (JSON schema,
    URL rules, unique URLs, non-empty names). Reject with a non-zero exit on
@@ -200,7 +201,7 @@ only when no bake exists, per the source order.
 
 | Check | How |
 |-------|-----|
-| Bundle bake | `scripts/package.sh --provision prov.json`, install, launch: instance present, locked, connect works |
+| Bundle bake | `scripts/package.sh --provision prov.json` (helper pending), install, launch: instance present, locked, connect works |
 | Windows HKLM | `reg add "HKLM\Software\Persea Desktop\Provisioning" /v config /t REG_SZ /d "<json>" /f`, launch |
 | Linux file | root-owned file at `/etc/persea-desktop/provision.json`, launch |
 | macOS file | root-owned file at `/Library/Application Support/Persea Desktop/provision.json`, launch |
