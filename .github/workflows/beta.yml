@@ -35,7 +35,7 @@ jobs:
       release_id: ${{ steps.beta.outputs.release_id }}
       beta_version: ${{ steps.beta.outputs.beta_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Create the beta pre-release
         id: beta
@@ -123,7 +123,7 @@ jobs:
               kill "$PID" 2>/dev/null || true
               wait "$PID" 2>/dev/null || true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
