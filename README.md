@@ -47,7 +47,8 @@ guides explain the one-time bypass on each OS.
 1. Launch the app and add your server (name + URL) on the welcome
    page.
 2. Log in inside the app window with any method the server supports.
-3. Pair this device from Settings → Device pairing.
+3. Pair this device: open Settings → Instances and click **Pair
+   device** on your server.
 4. Open a session: it appears as a tab, in the tray, and (when
    enabled) in notifications.
 

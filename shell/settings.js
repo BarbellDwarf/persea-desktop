@@ -157,6 +157,15 @@ function renderInstanceRow(inst) {
   });
   actions.appendChild(recheckBtn);
 
+  const pairBtn = document.createElement("button");
+  pairBtn.type = "button";
+  pairBtn.className = "btn btn-ghost";
+  pairBtn.textContent = "Pair device";
+  pairBtn.addEventListener("click", () => {
+    window.location.href = "pairing.html?url=" + encodeURIComponent(inst.url);
+  });
+  actions.appendChild(pairBtn);
+
   if (!inst.locked) {
     const editBtn = document.createElement("button");
     editBtn.type = "button";
@@ -281,23 +290,6 @@ async function initAppearance() {
     if (!value) return;
     applyAppearanceSetting(value);
     invoke("cmd_shell_set_appearance", { appearance: value }).catch(() => {});
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/* Clipboard (pairing placeholder)                                    */
-/* ------------------------------------------------------------------ */
-
-function initClipboard() {
-  const copyBtn = document.getElementById("btn-copy-code");
-  const code = document.getElementById("pairing-code");
-  if (!copyBtn || !code) return;
-  copyBtn.addEventListener("click", async () => {
-    const ok = await copyText(code.value);
-    copyBtn.textContent = ok ? "Copied" : "Copy failed";
-    setTimeout(() => {
-      copyBtn.textContent = "Copy";
-    }, 1500);
   });
 }
 
@@ -576,7 +568,6 @@ async function initUpdates() {
 
 reloadInstances();
 initAppearance();
-initClipboard();
 initShortcuts();
 initAbout();
 initHeader();

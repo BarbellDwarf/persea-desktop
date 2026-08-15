@@ -87,8 +87,9 @@ disabled, ask the server administrator.
 
 To pair:
 
-1. Open Settings → Device pairing (or right-click the tray icon, open
-   the server's menu and choose **Pair this device…**).
+1. Open Settings → Instances and click **Pair device** on the server
+   (or right-click the tray icon, open the server's menu and choose
+   **Pair this device…**).
 2. Click **Pair this device**. The app shows an 8-character code.
 3. Click **Open pairing page**. The app navigates to the server's
    account tokens page, where you are already logged in.
@@ -104,8 +105,8 @@ admin account), pair once per account: each pairing gets its own token
 and each can be revoked separately. Re-pairing from the same account
 replaces that account's token.
 
-Revoke a device from Settings → Device pairing, or from the server's
-account tokens page.
+Revoke a device from the pairing page (Settings → Instances → **Pair
+device**), or from the server's account tokens page.
 
 ## 5. Connect to a session
 
