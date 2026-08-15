@@ -11,8 +11,20 @@ const dialogDesc = document.getElementById("instance-dialog-desc");
 const instanceForm = document.getElementById("instance-form");
 const instanceName = document.getElementById("instance-name");
 const instanceUrl = document.getElementById("instance-url");
+const instanceTls = document.getElementById("instance-tls");
 
 let editingUrl = null;
+
+function tlsOverride() {
+  switch (instanceTls.value) {
+    case "allow":
+      return true;
+    case "block":
+      return false;
+    default:
+      return null;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Instance list                                                      */
@@ -234,6 +246,8 @@ function openEditDialog(inst) {
     "Changing the URL re-checks the server. Its data store keeps the previous URL's cookies, and device pairing is tied to the URL, so a renamed server must be paired again.";
   instanceName.value = inst.name;
   instanceUrl.value = inst.url;
+  instanceTls.value =
+    inst.allowInsecureTls === true ? "allow" : inst.allowInsecureTls === false ? "block" : "follow";
   instanceForm.dataset.mode = "edit";
   dialog.showModal();
   instanceName.focus();
@@ -247,9 +261,14 @@ instanceForm.addEventListener("submit", async (event) => {
   saveBtn.disabled = true;
   try {
     if (instanceForm.dataset.mode === "edit" && editingUrl) {
-      await invoke("cmd_instances_update", { url: editingUrl, name, newUrl: url });
+      await invoke("cmd_instances_update", {
+        url: editingUrl,
+        name,
+        newUrl: url,
+        allowInsecureTls: tlsOverride(),
+      });
     } else {
-      await invoke("cmd_instances_add", { name, url });
+      await invoke("cmd_instances_add", { name, url, allowInsecureTls: tlsOverride() });
     }
     dialog.close();
     await reloadInstances();

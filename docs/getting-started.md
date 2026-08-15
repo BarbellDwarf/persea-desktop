@@ -46,15 +46,24 @@ certificate (Let's Encrypt, a commercial CA) works out of the box. For
 a private CA, either install the CA certificate into the operating
 system's trust store (on Linux, copy it to
 `/usr/local/share/ca-certificates/` and run
-`sudo update-ca-certificates`), or enable Settings → Network →
-**Allow untrusted TLS certificates**, which skips certificate
-validation for the probe and the webviews entirely (Linux applies it
-immediately; Windows after the next launch; macOS is not supported and
-still needs the system trust store). Only use the toggle for servers
-you control, since it disables validation for every connection. If the
-certificate is not trusted, the add form reports `Unreachable — the
-server's TLS certificate is not trusted by this system`, and opening
-the server shows the browser-style certificate error page.
+`sudo update-ca-certificates`), or relax certificate validation:
+
+- Settings → Network → **Allow untrusted TLS certificates** skips
+  validation for every server, for the connection check and the
+  server windows (Linux applies it immediately; Windows after the
+  next launch; macOS is not supported and still needs the system
+  trust store).
+- A single server can opt out independently: in Settings →
+  Instances, open the server's Edit dialog and set **Untrusted TLS
+  certificates** to *Allow for this server*. That applies to the
+  connection check for that server only. The web engines cannot
+  skip certificate validation per origin, so the server window
+  still follows the global Network toggle.
+
+Only relax validation for servers you control. If the certificate is
+not trusted, the add form reports `Unreachable — the server's TLS
+certificate is not trusted by this system`, and opening the server
+shows the browser-style certificate error page.
 
 You can add more servers any time in Settings → Instances. Each server
 keeps its own login, sessions and data store, so signing in to one
