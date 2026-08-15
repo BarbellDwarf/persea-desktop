@@ -110,10 +110,17 @@
     <section class="settings-section" id="sec-kiosk" aria-labelledby="sec-kiosk-title">
       <h2 id="sec-kiosk-title">Kiosk</h2>
       <p class="section-desc">
-        Locks the window to a single instance. The kiosk option appears
-        only for servers whose probe reports kiosk support.
+        Locks this window to a single server: fullscreen, close blocked,
+        only that server's pages reachable. The toggle appears only for
+        servers whose probe reports kiosk support. Entering kiosk takes
+        the window to the server's connections page; leave with
+        <code>Ctrl+Alt+Shift+Q</code> pressed twice.
       </p>
-      <div class="placeholder-block">Kiosk mode arrives in a later release (D12).</div>
+
+      <div id="kiosk-toggles" class="kiosk-toggles" aria-live="polite"></div>
+      <p class="section-desc hidden" id="kiosk-note" role="status" aria-live="polite"></p>
+
+
     </section>
 
     <section class="settings-section" id="sec-updates" aria-labelledby="sec-updates-title">

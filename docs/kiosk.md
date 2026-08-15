@@ -13,7 +13,7 @@ cannot perform OS-level lockout.
 | Session pages (inline tabs, popped session windows) | Server setup wizard (`/setup`) |
 | Transfer window | Account pages (`/account`, `/account/*`, `/account/tokens.html`, ...) |
 | Session-ended notifications | Shell settings and pairing pages (unreachable: the viewport stays on the instance) |
-| | Tray (must not be created while kiosk is active) |
+| | Tray (never created while kiosk is active; removed when kiosk is entered mid-session, restored on exit) |
 | | Global hotkeys (all except the exit chord) |
 | | Window closing, resizing, maximization, devtools |
 
@@ -43,6 +43,31 @@ Two gates apply on top, both fail closed:
 2. **Escape-hatch gate**: the exit chord must actually register (see below).
    A conflicted chord or an unsupported platform keeps kiosk off with a
    warning. A kiosk without an exit is a trap.
+
+## Entering and leaving mid-session
+
+Kiosk is not only a startup state. Two live controls drive it, both
+server-gated on the probe's `kiosk_allowed` capability:
+
+- **Tray toggle**: each instance submenu carries a "Kiosk mode" check item
+  when the server supports kiosk. Clicking it emits the `kiosk-toggle`
+  event with `enabled: true`; the listener enters kiosk for that instance.
+- **Settings toggle**: the Settings → Kiosk section lists one toggle per
+  kiosk-capable server. It emits the same `kiosk-toggle` event, so both
+  controls share one listener.
+
+Entry runs the same gates as startup (provision pin off, missing
+capability, or a chord that cannot register all refuse entry) and lands
+the viewport on the target instance's connections page, so a toggle from
+the settings page leaves the shell page behind. The exit chord is
+re-registered on entry: exiting releases it, and re-entering without
+re-registering would leave the kiosk with no way out.
+
+While kiosk is active the tray icon is removed: the menu click that
+started kiosk fires its event first, so removing the icon from inside the
+event is safe. Exiting restores the tray. On Wayland the tray usually
+never existed, and the settings toggle shows the refusal reason in the
+section note; the tray toggle just logs.
 
 ## Window behavior
 
@@ -79,7 +104,9 @@ press once the dialog plugin is wired.
 
 In a pinned (provisioned) kiosk, the chord still exits for the session; the
 next launch re-enters kiosk. There is no other way out of kiosk mode while it
-is active: the tray is absent, hotkeys are off, close is blocked.
+is active: the tray is absent (removed on mid-session entry, never created
+at startup), hotkeys are off, close is blocked. Exiting restores the tray
+icon when one existed before entry.
 
 ## Wayland limitations
 
@@ -104,12 +131,15 @@ normally.
 
 ## Dispatcher wiring
 
-This module does not register itself. The dispatcher must:
+The kiosk module registers its own `kiosk-toggle` listener (in `setup`),
+so the toggles need no dispatcher wiring. The startup wiring the
+dispatcher must keep:
 
 1. Declare `mod kiosk;` in `src-tauri/src/lib.rs`.
 2. In the setup hook, after `instances::setup` and `hotkeys::setup`, before
-   the main window is built: `kiosk::setup(app)?;`. This resolves the
-   decision and registers the exit chord when kiosk is wanted.
+   the main window is built: `kiosk::setup(app)?;`. This registers the
+   `kiosk-toggle` listener, resolves the startup decision and registers
+   the exit chord when kiosk is wanted.
 3. On the main window builder: `.devtools(false)` when `kiosk::active()`.
 4. After `windows::setup` (the tab strip must exist for it to be hideable):
    `if kiosk::active() { kiosk::enter(app.handle()); }`.
@@ -127,6 +157,10 @@ This module does not register itself. The dispatcher must:
    No navigation-policy rebuild is needed: the consult reads live state, so
    kiosk entry and exit take effect immediately.
 6. The tray feature must not create the tray while `kiosk::is_active()`.
+   Mid-session entry and exit are handled inside the kiosk module:
+   `kiosk::enter`/`exit` drive `tray::set_kiosk`, which removes the tray
+   icon on entry and recreates it on exit. Dispatcher work: none beyond
+   the existing calls.
 
 No Cargo.toml or capability changes are needed by kiosk itself.
 
@@ -141,6 +175,8 @@ No Cargo.toml or capability changes are needed by kiosk itself.
 | Frozen page | Freeze the webview (kill the instance, load an error page): the chord still exits |
 | Hotkeys off | Summon / cycle-sessions chords do nothing in kiosk; they work again after exit |
 | Server gate | Server without `kiosk_allowed`: kiosk setting ignored, no toggle, chord inert |
-| Provision pin | `kiosk.enabled: true` overrides a user-off setting; `false` overrides a user-on one |
+| Provision pin | `kiosk.enabled: true` overrides a user-off setting; `false` overrides a user-on one (and refuses mid-session toggles) |
 | Chord conflict | Another program owns the chord: kiosk stays off with a warning |
-| Wayland | Kiosk refused, app runs normally, limitation logged |
+| Wayland | Kiosk refused, app runs normally, limitation logged; the settings toggle shows the refusal reason |
+| Tray toggle | Instance submenu "Kiosk mode" enters kiosk for that instance; the tray icon disappears; the chord exits and the tray returns |
+| Settings toggle | Settings → Kiosk: one toggle per kiosk-capable server; clicking enters kiosk for that server and leaves the shell page |

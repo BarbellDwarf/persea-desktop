@@ -34,6 +34,16 @@
 //! through the accessors, and provisioned kiosk deployments always set a
 //! default, which makes the mirror exact in practice).
 //!
+//! Mid-session entry runs the same gates: the tray's per-instance "Kiosk
+//! mode" item and the settings Kiosk section both emit the shared
+//! `kiosk-toggle` event, which [`setup`] listens for unconditionally (the
+//! listener registers even when no kiosk was decided at startup). Entry
+//! targets the instance from the event payload, re-registers the exit
+//! chord (exit released it), navigates the viewport to that instance and
+//! removes the tray icon; exit restores the tray. A provision pin of
+//! `false` refuses mid-session entry too, so a pinned-off deployment
+//! cannot be toggled into kiosk.
+//!
 //! # The exit chord
 //!
 //! `Ctrl+Alt+Shift+Q`, a global shortcut registered ONLY while kiosk is
@@ -49,6 +59,11 @@
 //! in this tree and not registered by the dispatcher; the confirm step
 //! is one function ([`on_chord_press`]) so a dialog-based confirm can
 //! replace the second press once the dialog plugin is wired.
+//!
+//! The chord is registered at [`setup`] when kiosk is decided, released
+//! at [`exit`], and registered again at every entry ([`enter_for`]): an
+//! exit always leaves the chord unregistered, so re-entry runs the
+//! escape-hatch gate again.
 //!
 //! Exiting kiosk restores the window (windowed, decorated, resizable,
 //! maximizable), the tab strip and the hotkeys. A provisioned kiosk
@@ -85,6 +100,8 @@
 //!    needed: the consult reads live state. Apply it in
 //!    `navigation_handler_for` AND `viewport_new_window_handler`.
 //! 6. The tray feature must not create the tray while `kiosk::is_active()`.
+//!    A mid-session entry removes the tray icon it was clicked from (the
+//!    click's menu event has already fired by then); exit restores it.
 //!
 //! No Cargo.toml or capability changes are needed by this module.
 #![allow(dead_code)] // dispatcher wiring consumes the entrypoints after landing
@@ -92,7 +109,8 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::Manager;
+use serde::Deserialize;
+use tauri::{Emitter, Listener, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcut, Shortcut, ShortcutEvent, ShortcutState};
 use url::Url;
 
@@ -102,6 +120,11 @@ const MAIN_WINDOW_LABEL: &str = "main";
 pub const EXIT_CHORD: &str = "ctrl+alt+shift+q";
 /// Seconds between the first chord press and the confirming second one.
 pub const CHORD_CONFIRM_WINDOW_SECS: u64 = 3;
+/// Emitted to the shell window when a kiosk toggle cannot enter kiosk
+/// mode, payload `{"instanceUrl": string, "reason": string}`. The
+/// settings page listens to revert its toggle and show the reason; the
+/// tray has no listener and ignores it.
+pub const EVENT_KIOSK_TOGGLE_FAILED: &str = "kiosk-toggle-failed";
 
 static STATE: Mutex<Option<KioskState>> = Mutex::new(None);
 
@@ -117,6 +140,10 @@ pub struct KioskState {
     instance: String,
     /// When the exit chord was last pressed, for the confirm window.
     armed_at: Option<Instant>,
+    /// Whether the exit chord is currently registered. `exit` releases
+    /// the chord, so re-entry re-registers it (registering twice would
+    /// error on the X11 backend).
+    chord_registered: bool,
 }
 
 /// Outcome of one exit-chord press.
@@ -185,6 +212,7 @@ pub fn navigation_blocked(url: &Url) -> bool {
 /// hideable). Never fails: unsupported or conflicted chords keep kiosk
 /// off with a warning.
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    register_toggle_listener(app);
     let Some(target) = startup_target() else {
         eprintln!("[kiosk] no instance configured; kiosk stays off");
         *STATE.lock().unwrap() = None;
@@ -212,6 +240,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 locked: provision == Some(true),
                 instance: target.url.clone(),
                 armed_at: None,
+                chord_registered: true,
             });
             eprintln!(
                 "[kiosk] kiosk decided on {}; exit chord {}",
@@ -226,22 +255,76 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Enter kiosk mode: lock the main window (fullscreen, undecorated,
-/// fixed size), hide the tab strip, disable the global hotkeys and block
-/// close requests. Called by the dispatcher AFTER `windows::setup`, only
-/// when [`is_active`] is already true from [`setup`]. Idempotent.
+/// Enter kiosk mode at startup, on the instance the startup decision
+/// targeted (the dispatcher call site; see [`enter_for`] for the shared
+/// implementation). Called by the dispatcher AFTER `windows::setup`, only
+/// when [`is_active`] is already true from [`setup`].
 pub fn enter(app: &tauri::AppHandle) {
+    let instance = active_instance().or_else(|| startup_target().map(|i| i.url));
+    let Some(instance) = instance else {
+        return;
+    };
+    enter_for(app, &instance);
+}
+
+/// Enter kiosk mode for a specific instance: lock the main window
+/// (fullscreen, undecorated, fixed size), hide the tab strip, disable the
+/// global hotkeys, register the exit chord, block close requests, land
+/// the viewport on the instance and remove the tray icon. Called by the
+/// startup dispatcher (via [`enter`]) and by the `kiosk-toggle` listener
+/// (tray and settings toggles). Idempotent.
+pub fn enter_for(app: &tauri::AppHandle, instance_url: &str) {
+    let url = instance_url.trim_end_matches('/').to_string();
+    if crate::provisioning::kiosk_enabled_override() == Some(false) {
+        toggle_failed(app, &url, "the provision document pins kiosk off");
+        return;
+    }
+    if crate::instances::instance(&url).is_none() {
+        toggle_failed(app, &url, "no such instance");
+        return;
+    }
+    if !crate::instances::capability(&url, "kiosk_allowed") {
+        toggle_failed(app, &url, "the server does not advertise kiosk_allowed");
+        return;
+    }
     {
         let mut state = match STATE.lock() {
             Ok(s) => s,
             Err(_) => return,
         };
-        let Some(s) = state.as_mut() else { return };
+        let s = state.get_or_insert_with(|| KioskState {
+            active: false,
+            locked: false,
+            instance: url.clone(),
+            armed_at: None,
+            chord_registered: false,
+        });
+        s.instance = url.clone();
         if s.active {
             return;
         }
-        s.active = true;
-        s.armed_at = None;
+        if !s.chord_registered {
+            drop(state);
+            if let Err(e) = register_exit_chord(app) {
+                toggle_failed(
+                    app,
+                    &url,
+                    &format!("the exit chord cannot be registered: {e}"),
+                );
+                return;
+            }
+            let mut state = match STATE.lock() {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let Some(s) = state.as_mut() else { return };
+            s.chord_registered = true;
+            s.active = true;
+            s.armed_at = None;
+        } else {
+            s.active = true;
+            s.armed_at = None;
+        }
     }
     crate::hotkeys::set_enabled(false);
     crate::windows::set_strip_visible(false);
@@ -261,14 +344,24 @@ pub fn enter(app: &tauri::AppHandle) {
             }
         });
     }
-    let instance = active_instance().unwrap_or_default();
-    eprintln!("[kiosk] kiosk mode active on {instance}");
+    // Land the viewport on the target instance: a toggle from the
+    // settings page must leave the shell page, and a tray toggle must
+    // lock onto the instance it was clicked for. At startup this is
+    // redundant with the dispatcher's auto-open, which navigates the
+    // same instance.
+    if let Err(e) = crate::instances::cmd_instances_open(app.clone(), url.clone()) {
+        eprintln!("[kiosk] kiosk entered but the instance could not be opened: {e}");
+    }
+    crate::tray::set_kiosk(app, true);
+    eprintln!("[kiosk] kiosk mode active on {url}");
 }
 
 /// Leave kiosk mode: release the exit chord, restore the hotkeys and the
-/// tab strip, and restore the window to windowed, decorated, resizable
-/// state. The confirmation lives in [`on_chord_press`]; the chord
-/// handler calls this on the confirming press.
+/// tab strip, restore the window to windowed, decorated, resizable
+/// state, and restore the tray icon (a mid-session entry removed it).
+/// The confirmation lives in [`on_chord_press`]; the chord handler calls
+/// this on the confirming press, and the toggle listener calls it when a
+/// toggle flips kiosk off.
 pub fn exit(app: &tauri::AppHandle) {
     {
         let mut state = match STATE.lock() {
@@ -286,6 +379,10 @@ pub fn exit(app: &tauri::AppHandle) {
         eprintln!(
             "[kiosk] exit chord could not be released ({e}); it stays inert while kiosk is off"
         );
+    } else if let Ok(mut state) = STATE.lock() {
+        if let Some(s) = state.as_mut() {
+            s.chord_registered = false;
+        }
     }
     crate::hotkeys::set_enabled(true);
     crate::windows::set_strip_visible(true);
@@ -295,6 +392,7 @@ pub fn exit(app: &tauri::AppHandle) {
         let _ = win.set_resizable(true);
         let _ = win.set_maximizable(true);
     }
+    crate::tray::set_kiosk(app, false);
     eprintln!("[kiosk] kiosk mode exited; the app is back in normal mode");
 }
 
@@ -398,6 +496,53 @@ fn startup_target() -> Option<crate::instances::Instance> {
 }
 
 // ---------------------------------------------------------------------------
+// Kiosk toggle (tray menu item + settings section)
+// ---------------------------------------------------------------------------
+
+/// Payload of the `kiosk-toggle` event both toggles emit, mirroring the
+/// tray's `{"instanceUrl", "enabled"}` schema.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KioskToggle {
+    instance_url: String,
+    enabled: bool,
+}
+
+/// Register the `kiosk-toggle` listener. Unconditional: the tray and
+/// settings toggles must work even when no kiosk was decided at startup.
+fn register_toggle_listener(app: &mut tauri::App) {
+    let handle = app.handle().clone();
+    app.listen_any(crate::tray::EVENT_KIOSK_TOGGLE, move |event| {
+        let Some(toggle) = serde_json::from_str::<KioskToggle>(event.payload()).ok() else {
+            eprintln!(
+                "[kiosk] malformed kiosk-toggle payload: {}",
+                event.payload()
+            );
+            return;
+        };
+        on_toggle(&handle, &toggle);
+    });
+}
+
+fn on_toggle(app: &tauri::AppHandle, toggle: &KioskToggle) {
+    if toggle.enabled {
+        enter_for(app, &toggle.instance_url);
+    } else {
+        exit(app);
+    }
+}
+
+/// Log a refused entry and tell the settings page why (it reverts its
+/// toggle and shows the reason).
+fn toggle_failed(app: &tauri::AppHandle, instance_url: &str, reason: &str) {
+    eprintln!("[kiosk] kiosk not entered for {instance_url}: {reason}");
+    let _ = app.emit(
+        EVENT_KIOSK_TOGGLE_FAILED,
+        serde_json::json!({ "instanceUrl": instance_url, "reason": reason }),
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -411,6 +556,7 @@ mod tests {
             locked,
             instance: instance.to_string(),
             armed_at: None,
+            chord_registered: false,
         }
     }
 
@@ -526,6 +672,18 @@ mod tests {
             ChordAction::Confirmed,
             "a press exactly at the window edge confirms"
         );
+    }
+
+    #[test]
+    fn toggle_payload_parses_camel_case() {
+        let raw = r#"{"instanceUrl": "https://persea.example.com", "enabled": true}"#;
+        let toggle: KioskToggle = serde_json::from_str(raw).unwrap();
+        assert_eq!(toggle.instance_url, "https://persea.example.com");
+        assert!(toggle.enabled);
+
+        let raw = r#"{"instanceUrl": "https://persea.example.com", "enabled": false}"#;
+        let toggle: KioskToggle = serde_json::from_str(raw).unwrap();
+        assert!(!toggle.enabled);
     }
 
     #[test]
