@@ -227,6 +227,8 @@ pub fn run() {
             transfer::cmd_transfer_download,
             notify::notifications_get_enabled,
             notify::notifications_set_enabled,
+            notify::cmd_updater_check,
+            notify::cmd_updater_download_and_restart,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persea Desktop");

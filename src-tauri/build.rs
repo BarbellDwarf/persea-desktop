@@ -38,6 +38,8 @@ fn main() {
             "cmd_transfer_download",
             "notifications_get_enabled",
             "notifications_set_enabled",
+            "cmd_updater_check",
+            "cmd_updater_download_and_restart",
             "cmd_instances_add",
             "cmd_instances_list",
             "cmd_instances_update",

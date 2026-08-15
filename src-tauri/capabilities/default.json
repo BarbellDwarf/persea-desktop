@@ -55,6 +55,8 @@
     "allow-cmd-transfer-download",
     "allow-notifications-get-enabled",
     "allow-notifications-set-enabled",
+    "allow-cmd-updater-check",
+    "allow-cmd-updater-download-and-restart",
     "allow-cmd-instances-add",
     "allow-cmd-instances-list",
     "allow-cmd-instances-update",
