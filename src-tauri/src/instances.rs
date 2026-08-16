@@ -54,6 +54,18 @@ pub struct Instance {
         rename = "kioskAllowed"
     )]
     pub kiosk_allowed: Option<bool>,
+    /// Per-instance untrusted-TLS override for the connection probe:
+    /// `Some(true)` accepts untrusted certificates for this server,
+    /// `Some(false)` enforces validation, `None` follows the global
+    /// shell toggle. The webview engines cannot bypass certificate
+    /// validation per origin, so the server windows always follow the
+    /// global setting; only the probe honors this field.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "allowInsecureTls"
+    )]
+    pub allow_insecure_tls: Option<bool>,
     /// Provisioning: locked entries cannot be edited or removed by
     /// the user. The settings UI must hide edit/remove for them.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -62,6 +74,20 @@ pub struct Instance {
     /// its last known version and capabilities.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub probe: Option<CachedProbe>,
+}
+
+impl Instance {
+    /// Effective untrusted-TLS flag for this server's probe: the
+    /// per-instance override when set, else the global shell toggle.
+    pub fn allow_insecure_tls_effective(&self) -> bool {
+        effective_tls(self.allow_insecure_tls)
+    }
+}
+
+/// Resolve the flag a probe should use: the per-instance override when
+/// set, else the global shell toggle.
+fn effective_tls(override_flag: Option<bool>) -> bool {
+    override_flag.unwrap_or_else(crate::shell_config::allow_insecure_tls)
 }
 
 /// Cached result of `GET /api/auth/status` (S05), persisted per instance.
@@ -314,6 +340,7 @@ impl InstanceStore {
                         url: p.url.clone(),
                         default: p.default,
                         kiosk_allowed: None,
+                        allow_insecure_tls: None,
                         locked: true,
                         probe: None,
                     });
@@ -493,12 +520,18 @@ fn auto_open(app: &tauri::App, store: &Mutex<InstanceStore>) {
 /// probe cache (ok = false, last-known values kept), not logged.
 fn refresh_probes_in_background(store: Arc<Mutex<InstanceStore>>) {
     tauri::async_runtime::spawn(async move {
-        let urls: Vec<String> = {
+        // Collect URL + effective TLS flag under one short lock; the
+        // probe waits must not hold the guard.
+        let targets: Vec<(String, bool)> = {
             let Ok(s) = store.lock() else { return };
-            s.file.instances.iter().map(|i| i.url.clone()).collect()
+            s.file
+                .instances
+                .iter()
+                .map(|i| (i.url.clone(), i.allow_insecure_tls_effective()))
+                .collect()
         };
-        for url in urls {
-            let outcome = probe_server(&url).await;
+        for (url, allow) in targets {
+            let outcome = probe_server(&url, allow).await;
             let mut changed = false;
             if let Ok(mut s) = store.lock() {
                 if let Some(inst) = s.file.instances.iter_mut().find(|i| i.url == url) {
@@ -544,6 +577,8 @@ pub struct InstanceView {
     pub url: String,
     pub default: bool,
     pub locked: bool,
+    #[serde(rename = "allowInsecureTls")]
+    pub allow_insecure_tls: Option<bool>,
     pub probe: Option<ProbeView>,
 }
 
@@ -553,6 +588,7 @@ fn instance_view(i: &Instance) -> InstanceView {
         url: i.url.clone(),
         default: i.default,
         locked: i.locked,
+        allow_insecure_tls: i.allow_insecure_tls,
         probe: i.probe.as_ref().map(|p| ProbeView {
             ok: p.ok,
             version: p.version.clone(),
@@ -588,12 +624,14 @@ fn probe_warnings(url: &str, p: &CachedProbe) -> Vec<String> {
 
 /// One full probe pass: status endpoint + first-run setup detection.
 /// Never panics and never blocks the caller for longer than the timeout.
-pub async fn probe_server(base_url: &str) -> CachedProbe {
+/// The caller resolves the effective untrusted-TLS flag
+/// (`Instance::allow_insecure_tls_effective` or [`effective_tls`]).
+pub async fn probe_server(base_url: &str, allow_insecure_tls: bool) -> CachedProbe {
     let base = base_url.trim_end_matches('/').to_string();
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(PROBE_TIMEOUT_SECS))
         .user_agent(concat!("persea-desktop/", env!("CARGO_PKG_VERSION")))
-        .danger_accept_invalid_certs(crate::shell_config::allow_insecure_tls())
+        .danger_accept_invalid_certs(allow_insecure_tls)
         .build()
     {
         Ok(c) => c,
@@ -847,14 +885,25 @@ pub fn cmd_instances_list() -> Result<Vec<InstanceView>, String> {
 }
 
 #[tauri::command]
-pub async fn cmd_instances_add(name: String, url: String) -> Result<InstanceView, String> {
+pub async fn cmd_instances_add(
+    name: String,
+    url: String,
+    allow_insecure_tls: Option<bool>,
+) -> Result<InstanceView, String> {
     let url = validate_instance_url(&url)?;
     let name = name.trim().to_string();
     if name.is_empty() {
         return Err("Name is required".to_string());
     }
     let handle = store_handle().ok_or_else(unavailable_store)?;
-    add_instance(handle, name, &url, probe_server(&url)).await
+    add_instance(
+        handle,
+        name,
+        &url,
+        allow_insecure_tls,
+        probe_server(&url, effective_tls(allow_insecure_tls)),
+    )
+    .await
 }
 
 /// Add an instance. The probe future is awaited only after the duplicate
@@ -864,6 +913,7 @@ async fn add_instance(
     handle: Arc<Mutex<InstanceStore>>,
     name: String,
     url: &str,
+    allow_insecure_tls: Option<bool>,
     probe: impl Future<Output = CachedProbe>,
 ) -> Result<InstanceView, String> {
     let is_default = {
@@ -886,6 +936,7 @@ async fn add_instance(
         url: url.to_string(),
         default: is_default,
         kiosk_allowed: None,
+        allow_insecure_tls,
         locked: false,
         probe: Some(outcome),
     });
@@ -898,6 +949,7 @@ pub async fn cmd_instances_update(
     url: String,
     name: Option<String>,
     new_url: Option<String>,
+    allow_insecure_tls: Option<bool>,
 ) -> Result<InstanceView, String> {
     let handle = store_handle().ok_or_else(unavailable_store)?;
     // Validate everything under a short lock (no awaits while held).
@@ -929,7 +981,7 @@ pub async fn cmd_instances_update(
     };
     // Probe outside the lock: the HTTP await must not hold the guard.
     let outcome = match &validated {
-        Some(nu) => Some(probe_server(nu).await),
+        Some(nu) => Some(probe_server(nu, effective_tls(allow_insecure_tls)).await),
         None => None,
     };
     // Apply under a fresh lock.
@@ -942,6 +994,7 @@ pub async fn cmd_instances_update(
     if let Some(n) = name {
         store.file.instances[idx].name = n.trim().to_string();
     }
+    store.file.instances[idx].allow_insecure_tls = allow_insecure_tls;
     if let (Some(nu), Some(o)) = (&validated, outcome) {
         store.file.instances[idx].url = nu.clone();
         store.file.instances[idx].probe = Some(o);
@@ -984,8 +1037,19 @@ pub fn cmd_instances_set_default(url: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn cmd_instances_probe(url: String) -> Result<ProbeView, String> {
     let url = validate_instance_url(&url)?;
-    let outcome = probe_server(&url).await;
     let handle = store_handle().ok_or_else(unavailable_store)?;
+    // Resolve the stored per-instance TLS override under a short lock,
+    // then probe without holding the guard (no await under it).
+    let allow = {
+        let store = handle
+            .lock()
+            .map_err(|_| "instance store is locked".to_string())?;
+        store
+            .find(&url)
+            .map(Instance::allow_insecure_tls_effective)
+            .ok_or_else(|| format!("No instance with URL {url}"))?
+    };
+    let outcome = probe_server(&url, allow).await;
     let mut store = handle
         .lock()
         .map_err(|_| "instance store is locked".to_string())?;
@@ -1078,6 +1142,7 @@ mod tests {
             url: "https://persea.example.com".into(),
             default: true,
             kiosk_allowed: None,
+            allow_insecure_tls: None,
             locked: false,
             probe: Some(CachedProbe {
                 ok: true,
@@ -1098,6 +1163,7 @@ mod tests {
             url: "https://lab.example.com".into(),
             default: false,
             kiosk_allowed: None,
+            allow_insecure_tls: None,
             locked: false,
             probe: None,
         });
@@ -1304,6 +1370,7 @@ mod tests {
             url: "https://user.example.com".into(),
             default: false,
             kiosk_allowed: None,
+            allow_insecure_tls: None,
             locked: false,
             probe: None,
         });
@@ -1312,6 +1379,7 @@ mod tests {
             url: "https://a.example.com".into(),
             default: true,
             kiosk_allowed: None,
+            allow_insecure_tls: None,
             locked: true,
             probe: None,
         });
@@ -1451,6 +1519,7 @@ mod tests {
             locked.to_string(),
             Some("Renamed".to_string()),
             None,
+            None,
         ));
         assert!(res.is_err());
         assert!(res.unwrap_err().contains("locked by your administrator"));
@@ -1481,6 +1550,7 @@ mod tests {
             handle.clone(),
             "Prod again".into(),
             "https://persea.example.com",
+            None,
             probe,
         ));
         assert!(res.is_err());
@@ -1510,6 +1580,7 @@ mod tests {
             handle.clone(),
             "New".into(),
             "https://new.example.com",
+            None,
             probe,
         ));
         assert!(res.is_ok());

@@ -65,8 +65,8 @@
         Allow servers whose TLS certificate is not trusted by this
         system: self-signed certificates and private CAs you have not
         installed in the OS trust store. Certificate validation is
-        skipped for every connection while this is on, so only enable
-        it for servers you control.
+        skipped for every server window while this is on, so only
+        enable it for servers you control.
       </p>
       <label class="toggle-row">
         <span class="toggle-label">Allow untrusted TLS certificates</span>
@@ -78,7 +78,11 @@
       <p class="section-desc">
         Off by default. Takes effect immediately on Linux; on Windows
         after the next launch. Not available on macOS, where the server
-        certificate must be trusted by the system.
+        certificate must be trusted by the system. A single server can
+        opt out individually in its Add/Edit dialog, but that applies
+        to the connection check only: the web engines cannot skip
+        validation per origin, so the windows always follow this global
+        toggle.
       </p>
     </section>
 
@@ -173,6 +177,18 @@
       <label for="instance-url">URL
         <input id="instance-url" name="url" type="url" required autocomplete="url" placeholder="https://persea.example.com">
       </label>
+      <label for="instance-tls">Untrusted TLS certificates
+        <select id="instance-tls" name="tls">
+          <option value="follow">Follow the global setting</option>
+          <option value="allow">Allow for this server</option>
+          <option value="block">Require a trusted certificate</option>
+        </select>
+      </label>
+      <p class="field-note">
+        Applies to the connection check for this server. The server
+        window still follows the global Network setting: the web
+        engines cannot skip certificate validation per origin.
+      </p>
       <div class="dialog-actions">
         <button type="button" id="instance-dialog-cancel" class="btn btn-ghost">Cancel</button>
         <button type="submit" class="btn btn-accent">Save</button>
