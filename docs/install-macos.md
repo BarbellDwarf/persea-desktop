@@ -54,12 +54,16 @@ not a bug.
 Quit the app and drag **Persea Desktop** from Applications to the
 Trash. Paired device tokens live in the macOS Keychain and are not
 removed by uninstalling; revoke a device from Settings → Device
-pairing if you want it gone.
+pairing (v1.1.0), or from the tray's server menu → **Pair this
+device…**, if you want it gone.
 
 ## Updates and channels
 
-There is no automatic updater yet. To update, download the new dmg and
-replace the app in Applications (drag the new one over the old).
+The app checks for updates automatically (on startup and every 4
+hours). In v1.1.0, Settings → Updates adds the manual **Check for
+updates** and **Download & restart** actions. To update manually,
+download the new dmg and replace the app in Applications (drag the
+new one over the old).
 
 Two channels exist:
 
@@ -68,10 +72,10 @@ Two channels exist:
   downloadable from the same page. The beta release is rebuilt
   frequently and its download links are only valid between builds.
 
-Installing a beta moves you to the beta channel: once the automatic
-updater ships, beta installs will keep updating from the beta channel.
-Leaving the beta channel means installing the stable installer, which
-updates from stable from then on. See [beta.md](beta.md).
+Installing a beta moves you to the beta channel: beta installs update
+from the beta channel through the updater. Leaving the beta channel
+means installing the stable installer, which updates from stable from
+then on. See [beta.md](beta.md).
 
 ## macOS-specific notes
 

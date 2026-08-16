@@ -18,7 +18,8 @@ cannot perform OS-level lockout.
 | | Window closing, resizing, maximization, devtools |
 
 The blocklist is enforced at the URL path level in the webview navigation
-handlers; outside kiosk mode the same paths behave as usual.
+handlers (the handler consult is wired in v1.1.0); outside kiosk mode the
+same paths behave as usual.
 
 ## Activation
 
@@ -39,7 +40,8 @@ Two gates apply on top, both fail closed:
 1. **Server gate**: the instance probe must advertise `kiosk_allowed`. No
    probe, no capability: kiosk is unavailable, the config is ignored, the
    exit chord is inert, and the shell never shows a kiosk toggle for that
-   server.
+   server (the Settings kiosk toggle ships in v1.1.0 and appears only for
+   servers that pass this gate).
 2. **Escape-hatch gate**: the exit chord must actually register (see below).
    A conflicted chord or an unsupported platform keeps kiosk off with a
    warning. A kiosk without an exit is a trap.
@@ -96,11 +98,13 @@ mode.
 
 Why a second press instead of a native dialog: tauri 2.11.5 exposes no
 window-level key event hook (verified: no `on_key_event` anywhere in the
-tauri / tauri-runtime / tauri-runtime-wry sources), and native dialogs need
-tauri-plugin-dialog, which is declared in `Cargo.toml` but not registered by
-the dispatcher in this tree. The confirm step is one function
-(`kiosk::on_chord_press`), so a dialog-based confirm can replace the second
-press once the dialog plugin is wired.
+tauri / tauri-runtime / tauri-runtime-wry sources), and the dialog
+plugin's confirm round trip is not wired in this tree: the plugin itself
+is registered (it backs the download save dialog), but the confirm
+script only activates when the server page emits a request event. The
+confirm step is one function
+(`kiosk::on_chord_press`), so a dialog-based confirm can replace the
+second press once the round trip is wired.
 
 In a pinned (provisioned) kiosk, the chord still exits for the session; the
 next launch re-enters kiosk. There is no other way out of kiosk mode while it
@@ -169,7 +173,7 @@ No Cargo.toml or capability changes are needed by kiosk itself.
 | Check | How |
 |-------|-----|
 | Kiosk launch | Enable kiosk, launch: fullscreen, undecorated, non-resizable, lands on the connections page |
-| Nav lockdown | In kiosk: `/admin`, `/admin.html`, `/admin/users.html`, `/setup`, `/account/tokens.html` blocked; `/` and `/client/<id>` reachable. Outside kiosk: the same paths behave as usual |
+| Nav lockdown | In kiosk (v1.1.0): `/admin`, `/admin.html`, `/admin/users.html`, `/setup`, `/account/tokens.html` blocked; `/` and `/client/<id>` reachable. Outside kiosk: the same paths behave as usual |
 | Exit chord | `Ctrl+Alt+Shift+Q` twice within 3 s: kiosk exits, window/hotkeys/strip restore. Single press: nothing |
 | Close blocked | Alt+F4 / window close during kiosk: nothing happens |
 | Frozen page | Freeze the webview (kill the instance, load an error page): the chord still exits |

@@ -23,7 +23,8 @@ Requirements:
   toggle). When it is off, drops are ignored with a "transfers disabled
   by this server" notice; the web UI's in-session upload button still
   works.
-- The device must be paired (device pairing in settings). The paired
+- The device must be paired (device pairing from Settings → Device
+  pairing in v1.1.0, or from the tray's server menu). The paired
   token is the upload identity: only the owner of the session (or an
   admin) can upload to it.
 - Files up to 1 GiB are accepted by the shell path (the file is
@@ -76,7 +77,7 @@ window to send them."
 | Symptom | Cause / fix |
 |---------|-------------|
 | "Transfers disabled by this server" | Admin toggle off, or the capability probe never succeeded (fail-closed). |
-| "Device not paired" | Run device pairing in settings for the instance. |
+| "Device not paired" | Run device pairing for the instance (Settings → Device pairing in v1.1.0, or the tray's server menu). |
 | "SSH session" notice | SSH has no REST drive; use the in-session upload button. |
 | "The paired token does not own this session" | Pair with the account that started the session. |
 | "Token rejected" | The paired token was revoked; re-pair. |

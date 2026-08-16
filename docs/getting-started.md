@@ -98,8 +98,7 @@ To pair:
 
 1. Open Settings → Instances and click **Pair device** on the server
    (or right-click the tray icon, open the server's menu and choose
-   **Pair this device…**).
-2. Click **Pair this device**. The app shows an 8-character code.
+   **Pair this device…**).2. Click **Pair this device**. The app shows an 8-character code.
 3. Click **Open pairing page**. The app navigates to the server's
    account tokens page, where you are already logged in.
 4. Paste the code there and confirm the device.
@@ -116,7 +115,6 @@ replaces that account's token.
 
 Revoke a device from the pairing page (Settings → Instances → **Pair
 device**), or from the server's account tokens page.
-
 ## 5. Connect to a session
 
 Open a session from the server's connections page as usual. Instead of

@@ -39,13 +39,16 @@ steps are in [getting-started.md](getting-started.md).
 Uninstalling removes the app but keeps nothing else: no server data
 lives on the machine. Paired device tokens live in the Windows
 Credential Manager; uninstalling the app does not remove them. Revoke
-a device from Settings → Device pairing first if you want it gone.
+a device from Settings → Device pairing (v1.1.0), or from the tray's
+server menu → **Pair this device…**, first if you want it gone.
 
 ## Updates and channels
 
-There is no automatic updater yet. To update, install the newer
-installer over the current installation; your servers and pairing
-survive.
+The app checks for updates automatically (on startup and every 4
+hours). In v1.1.0, Settings → Updates adds the manual **Check for
+updates** and **Download & restart** actions. To update manually,
+install the newer installer over the current installation; your
+servers and pairing survive.
 
 Two channels exist:
 
@@ -55,10 +58,10 @@ Two channels exist:
   is rebuilt frequently and its download links are only valid between
   builds.
 
-Installing a beta moves you to the beta channel: once the automatic
-updater ships, beta installs will keep updating from the beta channel.
-Leaving the beta channel means installing the stable installer, which
-updates from stable from then on. See [beta.md](beta.md).
+Installing a beta moves you to the beta channel: beta installs update
+from the beta channel through the updater. Leaving the beta channel
+means installing the stable installer, which updates from stable from
+then on. See [beta.md](beta.md).
 
 ## Windows-specific notes
 

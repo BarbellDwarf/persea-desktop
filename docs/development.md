@@ -38,10 +38,10 @@ The Rust modules under `src-tauri/src/`:
 
 ## Prerequisites
 
-Rust is pinned by `rust-toolchain.toml` (currently 1.88); with rustup
-installed the right toolchain installs itself on first build. The
-Debian 13 native toolchain is too old for the keyring store crates
-(zbus needs Rust 1.87+), so use rustup on Debian too.
+The minimum Rust version is pinned in `src-tauri/Cargo.toml`
+(`rust-version = "1.88"`). The Debian 13 native toolchain is too old for
+the keyring store crates (zbus needs Rust 1.87+), so use rustup with
+1.88 or newer on Debian too.
 
 Install the Tauri CLI once:
 
@@ -146,8 +146,8 @@ matrix and degrade to render checks locally.
 
 The canonical desktop screenshots under `docs/screenshots/` are
 captured by the E2E suite with `PERSEA_E2E_SHOTS` set. The e2e
-workflow's manual run regenerates them and opens a PR when they
-drift.
+workflow's manual run regenerates them and opens (or updates) the
+`screenshots/regen` PR when they drift.
 
 ## CI
 

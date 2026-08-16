@@ -44,9 +44,11 @@ WEBKIT_DISABLE_DMABUF_RENDERER=1 persea-desktop
 For desktop files, add `env WEBKIT_DISABLE_DMABUF_RENDERER=1` to the
 `Exec=` line. They are process-startup settings: WebKit reads them
 before the first webview exists, so exporting them after launch does
-nothing. The settings page will gain a "Hardware acceleration" toggle
-that applies these variables automatically (currently the variables are
-documented-only, never set by default).
+nothing. The Settings → Performance **Hardware acceleration** toggle
+applies these variables automatically: with the toggle off, the app
+exports both at startup (Windows disables the GPU through the WebView2
+launch arguments instead). The variables are never set by default; only
+the toggle sets them.
 
 ## GStreamer codecs and H.264
 

@@ -15,7 +15,7 @@ interim workarounds.
 | Win/Super key into the session | Works (X11 hook) | Limited | XWayland passive grabs deliver the key while an XWayland window is focused (compositor-dependent); the focused-session inhibit protocol exists but is not wired. The toolbar Win button always works. See `wayland-keyboard.md`. |
 | System tray | Works (AppIndicator/SNI) | Host-dependent | The tray speaks SNI (StatusNotifierItem). KDE Plasma shows it natively; GNOME needs the AppIndicator and KStatusNotifierItem extension; sway needs a tray-capable bar (swaybar includes one). No host = no tray. |
 | Notifications | XDG daemon | XDG daemon | Same mechanism on both (D-Bus `org.freedesktop.Notifications`). Needs a running daemon (GNOME Shell, Plasma, or a standalone one like dunst). See `linux-troubleshooting.md`. |
-| Kiosk mode | Best-effort | Best-effort | Soft kiosk on every platform. Wayland adds nothing worse: the window goes fullscreen as asked; the exit chord is shell-level and always works. See `kiosk.md`. |
+| Kiosk mode | Best-effort | Refused | Soft kiosk on X11, Windows and macOS. The exit chord is a global shortcut and the plugin is X11-only: on Wayland the chord cannot register, so the escape-hatch gate keeps kiosk off entirely. See `kiosk.md`. |
 | Tab strip docking | Works | Best-effort | The strip is positioned with `set_position`, which Wayland compositors may ignore. The strip can end up offset from the main window; it still hides in fullscreen/maximized/minimized states. |
 | Multi-window sessions | Works | Works | Window creation, popping out, expand-to-monitor all work. |
 | Drag-and-drop, clipboard | Works | Works | wry 0.47+ handles Wayland drag-drop; clipboard is native. |
