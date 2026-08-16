@@ -19,7 +19,7 @@ The publish step runs after all four legs, so a release missing a platform leg c
 
 ## Step by step: cut a release
 
-1. Bump the version in `src-tauri/Cargo.toml` (`package.version`) and `src-tauri/tauri.conf.json` (`version`). Keep the two in sync.
+1. Bump the version in `src-tauri/Cargo.toml` (`package.version`) and `src-tauri/tauri.conf.json` (`version`), and commit it. Keep the two in sync (the release workflow verifies the tag against the bumped version and fails otherwise).
 2. Merge to `main` and wait for CI to be green.
 3. Tag and push:
 

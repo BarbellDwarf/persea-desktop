@@ -60,3 +60,15 @@ Persea Desktop is the Tauri 2 desktop client for persea (the server repo: persea
 - **New features** → `gh issue create` with an `enhancement` label, then `gh project item-add` to `persea features`.
 - **Status lives in the issue**: opened → assigned to project → worked → closed (with the fix PR linked).
 - Check `gh issue list --repo persea-grove/persea-desktop --state open` before starting work.
+
+## Releases
+
+- Every release requires a version bump first: `version` in
+  `src-tauri/tauri.conf.json` and `package.version` in
+  `src-tauri/Cargo.toml` (plus `src-tauri/Cargo.lock`) must move to the
+  new version and stay in sync. The release workflow refuses to run
+  when the tag does not match the bumped version.
+- Release notes are auto-generated from merged PRs at publish time
+  (`.github/workflows/release.yml`, `--generate-notes`); no manual
+  CHANGELOG file is maintained.
+- The full cut procedure lives in docs/release.md.

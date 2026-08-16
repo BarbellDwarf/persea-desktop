@@ -30,6 +30,20 @@ jobs:
       release_id: ${{ steps.release.outputs.release_id }}
     steps:
       - uses: actions/checkout@v7
+      - name: Verify the version bump matches the tag
+        run: |
+          set -euo pipefail
+          CONF_VERSION=$(jq -r .version src-tauri/tauri.conf.json)
+          CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
+          if [ "$CONF_VERSION" != "$CARGO_VERSION" ]; then
+            echo "version mismatch: tauri.conf.json=$CONF_VERSION Cargo.toml=$CARGO_VERSION" >&2
+            exit 1
+          fi
+          if [ "v$CONF_VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match the bumped version v$CONF_VERSION; bump the version before tagging" >&2
+            exit 1
+          fi
+          echo "version $CONF_VERSION matches tag $GITHUB_REF_NAME"
       - name: Create or reuse the draft release
         id: release
         env:

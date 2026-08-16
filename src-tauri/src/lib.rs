@@ -269,7 +269,10 @@ mod tests {
     fn app_identity_is_locked_to_the_d01_decisions() {
         let cfg = load_config();
         assert_eq!(cfg.product_name, "Persea Desktop");
-        assert_eq!(cfg.version, "1.0.0");
+        // The version follows the package version: releases bump
+        // Cargo.toml + tauri.conf.json together (see AGENTS.md, Releases),
+        // so the check locks the identity, not a specific release number.
+        assert_eq!(cfg.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(cfg.identifier, "dev.persea.desktop");
         assert_eq!(cfg.build.frontend_dist, "../shell");
     }
