@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-updater-download-and-restart"
+description = "Enables the cmd_updater_download_and_restart command without any pre-configured scope."
+commands.allow = ["cmd_updater_download_and_restart"]
+
+[[permission]]
+identifier = "deny-cmd-updater-download-and-restart"
+description = "Denies the cmd_updater_download_and_restart command without any pre-configured scope."
+commands.deny = ["cmd_updater_download_and_restart"]

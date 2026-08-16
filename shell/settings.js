@@ -1,6 +1,6 @@
 /* Persea Desktop settings page: instances CRUD + probe display,
  * appearance (shell theme), hardware acceleration, global shortcuts,
- * placeholders for later features, About.
+ * updates, placeholders for later features, About.
  * Runs after app.js (invoke, initTheme, capabilityChips, copyText).
  */
 
@@ -518,6 +518,58 @@ async function initNotifications() {
     } catch (err) {
       toggle.checked = !toggle.checked;
       alert("Failed to update notifications: " + err);
+    }
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Updates                                                            */
+/* ------------------------------------------------------------------ */
+
+async function initUpdates() {
+  const versionEl = document.getElementById("updates-version");
+  if (versionEl) versionEl.textContent = await appVersion();
+
+  const checkBtn = document.getElementById("btn-check-updates");
+  const noteEl = document.getElementById("updates-note");
+  const downloadBtn = document.getElementById("btn-download-restart");
+  if (!checkBtn || !noteEl || !downloadBtn) return;
+
+  const showState = (available) => {
+    if (available) {
+      noteEl.textContent = "Persea Desktop " + available + " is available.";
+      downloadBtn.classList.remove("hidden");
+    } else {
+      noteEl.textContent = "You are up to date.";
+      downloadBtn.classList.add("hidden");
+    }
+  };
+
+  checkBtn.addEventListener("click", async () => {
+    checkBtn.disabled = true;
+    checkBtn.textContent = "Checking…";
+    try {
+      showState(await invoke("cmd_updater_check"));
+    } catch (err) {
+      noteEl.textContent = "Update check failed: " + err;
+      downloadBtn.classList.add("hidden");
+    } finally {
+      checkBtn.disabled = false;
+      checkBtn.textContent = "Check for updates";
+    }
+  });
+
+  downloadBtn.addEventListener("click", async () => {
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = "Downloading…";
+    try {
+      await invoke("cmd_updater_download_and_restart");
+      noteEl.textContent = "The update downloaded and is being installed.";
+    } catch (err) {
+      noteEl.textContent = "Download failed: " + err;
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = "Download & restart";
     }
   });
 }

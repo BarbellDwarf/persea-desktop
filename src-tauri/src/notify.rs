@@ -321,9 +321,9 @@ static NOTIFIED_VERSION: Mutex<Option<String>> = Mutex::new(None);
 /// Auto-update plugin, registered by the dispatcher in the plugin
 /// chain. Its setup hook spawns the background check loop (startup plus
 /// every 4 hours), so the updater wiring needs no call in the app setup
-/// hook. The plugin also registers the manual check and
-/// download-and-restart commands that back the settings Updates
-/// section.
+/// hook. The manual check and download-and-restart commands live in the
+/// app invoke_handler instead: the app ACL (capabilities/default.json)
+/// gates them, which a plugin-scoped handler would not do.
 pub fn updater_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri::plugin::Builder::new("persea-updater")
         .setup(|app, _| {
@@ -333,10 +333,6 @@ pub fn updater_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            cmd_updater_check,
-            cmd_updater_download_and_restart
-        ])
         .build()
 }
 

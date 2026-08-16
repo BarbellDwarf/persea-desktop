@@ -131,7 +131,18 @@
     <section class="settings-section" id="sec-updates" aria-labelledby="sec-updates-title">
       <h2 id="sec-updates-title">Updates</h2>
       <p class="section-desc">Application updates and the update channel.</p>
-      <div class="placeholder-block">Automatic updates arrive in a later release (D13).</div>
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <div>
+          <div>Version <span id="updates-version"></span></div>
+          <p class="field-note">
+            Channel: stable. Install a <a href="https://github.com/persea-grove/persea-desktop/blob/main/docs/beta.md" data-external>beta</a>
+            build to follow the beta channel; beta installers never consume the stable channel.
+          </p>
+        </div>
+        <button id="btn-check-updates" type="button" class="btn btn-ghost">Check for updates</button>
+      </div>
+      <p class="field-note" id="updates-note" role="status" aria-live="polite"></p>
+      <button id="btn-download-restart" type="button" class="btn btn-accent hidden">Download &amp; restart</button>
     </section>
 
     <section class="settings-section" id="sec-about" aria-labelledby="sec-about-title">
