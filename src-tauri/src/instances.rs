@@ -18,6 +18,7 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -852,25 +853,44 @@ pub async fn cmd_instances_add(name: String, url: String) -> Result<InstanceView
     if name.is_empty() {
         return Err("Name is required".to_string());
     }
-    let outcome = probe_server(&url).await;
     let handle = store_handle().ok_or_else(unavailable_store)?;
+    add_instance(handle, name, &url, probe_server(&url)).await
+}
+
+/// Add an instance. The probe future is awaited only after the duplicate
+/// check under a short lock, so an already-known URL errors without any
+/// network wait; the probe is also never awaited while the lock is held.
+async fn add_instance(
+    handle: Arc<Mutex<InstanceStore>>,
+    name: String,
+    url: &str,
+    probe: impl Future<Output = CachedProbe>,
+) -> Result<InstanceView, String> {
+    let is_default = {
+        let store = handle
+            .lock()
+            .map_err(|_| "instance store is locked".to_string())?;
+        if store.index_of(url).is_some() {
+            return Err(format!("An instance with URL {url} already exists"));
+        }
+        store.file.instances.is_empty()
+    };
+    // Probe outside the lock: the HTTP await must not hold the guard.
+    let outcome = probe.await;
+    // Apply under a fresh lock.
     let mut store = handle
         .lock()
         .map_err(|_| "instance store is locked".to_string())?;
-    if store.index_of(&url).is_some() {
-        return Err(format!("An instance with URL {url} already exists"));
-    }
-    let is_default = store.file.instances.is_empty();
     store.file.instances.push(Instance {
         name,
-        url: url.clone(),
+        url: url.to_string(),
         default: is_default,
         kiosk_allowed: None,
         locked: false,
         probe: Some(outcome),
     });
     store.save().map_err(|e| e.to_string())?;
-    Ok(instance_view(store.find(&url).unwrap()))
+    Ok(instance_view(store.find(url).unwrap()))
 }
 
 #[tauri::command]
@@ -1037,6 +1057,7 @@ fn is_false(b: &bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn tmp_store_path(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
@@ -1445,5 +1466,57 @@ mod tests {
         assert!(store.find(locked).is_some());
 
         *STORE.lock().unwrap() = None;
+    }
+
+    #[test]
+    fn duplicate_add_errors_before_probe() {
+        let handle = Arc::new(Mutex::new(sample_store()));
+        let probed = Arc::new(AtomicUsize::new(0));
+        let probe_calls = probed.clone();
+        let probe = async move {
+            probe_calls.fetch_add(1, Ordering::SeqCst);
+            unreachable_probe("probe must not run for a duplicate".into())
+        };
+        let res = tauri::async_runtime::block_on(add_instance(
+            handle.clone(),
+            "Prod again".into(),
+            "https://persea.example.com",
+            probe,
+        ));
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("already exists"));
+        assert_eq!(probed.load(Ordering::SeqCst), 0);
+        assert_eq!(handle.lock().unwrap().file.instances.len(), 2);
+    }
+
+    #[test]
+    fn add_stores_probe_outcome_on_success() {
+        let handle = Arc::new(Mutex::new(InstanceStore::empty(tmp_store_path(
+            "add-success",
+        ))));
+        let probe = async {
+            CachedProbe {
+                ok: true,
+                version: "1.0.0".into(),
+                capabilities: HashMap::from([("kiosk_allowed".into(), true)]),
+                latest_version: None,
+                update_available: false,
+                needs_setup: false,
+                checked_at: 7,
+                error: None,
+            }
+        };
+        let res = tauri::async_runtime::block_on(add_instance(
+            handle.clone(),
+            "New".into(),
+            "https://new.example.com",
+            probe,
+        ));
+        assert!(res.is_ok());
+        let store = handle.lock().unwrap();
+        let inst = store.find("https://new.example.com").unwrap();
+        assert_eq!(inst.name, "New");
+        assert!(inst.default);
+        assert!(inst.probe.as_ref().unwrap().ok);
     }
 }
