@@ -51,12 +51,19 @@ KEY=$("$BIN" --config "$CONF" add-admin --name e2e-admin | grep "API Key:" | awk
 echo "[provision] starting the server on 127.0.0.1:$PORT..."
 "$BIN" --config "$CONF" > "$WORK/persea.log" 2>&1 &
 echo $! > "$WORK/persea.pid"
+HEALTH_OK=0
 for i in $(seq 1 30); do
   if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
+    HEALTH_OK=1
     break
   fi
   sleep 1
 done
+if [ "$HEALTH_OK" != "1" ]; then
+  echo "persea server never became healthy; log tail:" >&2
+  tail -40 "$WORK/persea.log" >&2 || true
+  exit 1
+fi
 
 echo "[provision] completing first-run setup (admin user)..."
 ADMIN_PASSWORD="${PERSEA_E2E_ADMIN_PASSWORD:-e2e-admin-password-12345}"
