@@ -8,13 +8,17 @@
 //!   "Pair this device…" / "Re-login needed — pair again…"), and the
 //!   kiosk toggle, which only appears when the instance probe reports
 //!   `kiosk_allowed` (server-gating rule). The toggle emits
-//!   [`EVENT_KIOSK_TOGGLE`] for the kiosk feature to consume; the tray's
-//!   own kiosk awareness comes from [`set_kiosk`].
+//!   [`EVENT_KIOSK_TOGGLE`], which the kiosk feature listens for to
+//!   enter/exit kiosk; the tray's own kiosk awareness comes from
+//!   [`set_kiosk`], which removes the tray icon on entry (the toggle's
+//!   menu event has already fired by then) and recreates it on exit.
 //! - empty states: with zero instances the menu is a single "Add
 //!   instance…" item into the shell settings page; an instance with no
 //!   live sessions shows a disabled "No active sessions" item.
-//! - About + Quit (predefined items). In kiosk mode both are hidden and
-//!   the instance submenus shrink to sessions only.
+//! - About + Quit (predefined items). Both are hidden in the kiosk menu
+//!   (the menu that renders when the tray host is unavailable and the
+//!   icon cannot be removed) and the instance submenus shrink to
+//!   sessions only.
 //!
 //! The tray icon is monochrome (template style), three variants: base
 //! (no sessions), active (filled dot: live sessions exist), signed-out
@@ -48,8 +52,9 @@ use crate::poller::is_terminal;
 
 /// Tray icon id.
 pub const TRAY_ID: &str = "main";
-/// Emitted when the user toggles the kiosk menu item, with payload
-/// `{"instanceUrl": string, "enabled": bool}`. The kiosk feature (D12)
+/// Emitted when the user toggles the kiosk menu item (and by the
+/// settings Kiosk section, which mirrors it), with payload
+/// `{"instanceUrl": string, "enabled": bool}`. The kiosk listener
 /// consumes it and drives entry/exit; `set_kiosk` reflects the result.
 pub const EVENT_KIOSK_TOGGLE: &str = "kiosk-toggle";
 /// Shell page hosting instance settings (the "Add instance" target).
@@ -99,9 +104,30 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     crate::notify::setup(app)?;
     let handle = app.handle().clone();
     *STATE.lock().unwrap() = Some(Arc::new(Mutex::new(TrayState::default())));
+    create_tray(&handle);
+    crate::poller::start(&handle);
+    refresh(&handle);
+    Ok(())
+}
 
-    let menu = build_menu(&handle)?;
-    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+/// Build the tray icon with the current menu. Used by [`setup`] and by
+/// [`set_kiosk`] when kiosk exits (the icon was removed on entry). A
+/// build failure logs and continues.
+fn create_tray(app: &AppHandle) {
+    let menu = match build_menu(app) {
+        Ok(menu) => menu,
+        Err(e) => {
+            eprintln!("persea-desktop: tray menu unavailable ({e}); continuing without it");
+            return;
+        }
+    };
+    let icon = match tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png")) {
+        Ok(icon) => icon,
+        Err(e) => {
+            eprintln!("persea-desktop: tray icon unavailable ({e}); continuing without it");
+            return;
+        }
+    };
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .menu(&menu)
@@ -129,26 +155,37 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => eprintln!("persea-desktop: tray unavailable ({e}); continuing without it"),
     }
-
-    crate::poller::start(&handle);
-    refresh(&handle);
-    Ok(())
 }
 
-/// Kiosk-aware tray refresh. The kiosk feature (D12) calls this on entry
-/// and exit: in kiosk mode the menu drops About, Quit, instance
-/// switching, pair items and the kiosk toggle itself, leaving only the
-/// session switcher.
-#[allow(dead_code)] // kiosk feature (D12) calls this on entry/exit; placeholder until wired
+/// Kiosk-aware tray refresh. The kiosk listener calls this on entry and
+/// exit. Entry removes the tray icon, so the "no tray while kiosk is
+/// active" rule holds mid-session too; the toggle's menu event has
+/// already fired by the time this runs, so removing the icon from inside
+/// the event is safe. Exit recreates the icon. Removal is best-effort:
+/// when the tray host is unavailable the kiosk menu (sessions only)
+/// still renders via the kiosk flag.
 pub fn set_kiosk(app: &AppHandle, kiosk: bool) {
     let Some(state) = state_handle() else { return };
-    let mut state = state.lock().unwrap();
-    if state.kiosk == kiosk {
+    let changed = {
+        let mut state = state.lock().unwrap();
+        if state.kiosk == kiosk {
+            false
+        } else {
+            state.kiosk = kiosk;
+            true
+        }
+    };
+    if !changed {
         return;
     }
-    state.kiosk = kiosk;
-    drop(state);
-    refresh(app);
+    if kiosk {
+        refresh(app);
+        *TRAY.lock().unwrap() = None;
+        let _ = app.remove_tray_by_id(TRAY_ID);
+    } else {
+        create_tray(app);
+        refresh(app);
+    }
 }
 
 /// Update the session list of one instance (from the poller). Rebuilds

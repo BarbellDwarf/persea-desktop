@@ -211,6 +211,7 @@ async function reloadInstances() {
   instances
     .map(renderInstanceRow)
     .forEach((row) => listEl.appendChild(row));
+  renderKioskToggles(instances);
 }
 
 /* ------------------------------------------------------------------ */
@@ -262,6 +263,84 @@ instanceForm.addEventListener("submit", async (event) => {
 
 document.getElementById("btn-add-instance").addEventListener("click", openAddDialog);
 document.getElementById("instance-dialog-cancel").addEventListener("click", () => dialog.close());
+
+/* ------------------------------------------------------------------ */
+/* Kiosk (per-instance toggle, mirrors the tray "Kiosk mode" item)     */
+/* ------------------------------------------------------------------ */
+
+const KIOSK_TOGGLE_EVENT = "kiosk-toggle";
+const KIOSK_TOGGLE_FAILED_EVENT = "kiosk-toggle-failed";
+const kioskInputs = new Map();
+
+function kioskCapable(inst) {
+  return !!(inst.probe && inst.probe.capabilities && inst.probe.capabilities.kiosk_allowed);
+}
+
+function emitKioskToggle(url, enabled) {
+  if (!window.perseaShell || !window.perseaShell.emit) return;
+  window.perseaShell.emit(KIOSK_TOGGLE_EVENT, { instanceUrl: url, enabled });
+}
+
+function showKioskNote(message) {
+  const note = document.getElementById("kiosk-note");
+  if (!note) return;
+  note.textContent = message;
+  note.classList.toggle("hidden", !message);
+}
+
+function renderKioskToggles(instances) {
+  const container = document.getElementById("kiosk-toggles");
+  if (!container) return;
+  kioskInputs.clear();
+  container.textContent = "";
+  showKioskNote("");
+  const capable = instances.filter(kioskCapable);
+  if (!capable.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No configured server supports kiosk mode.";
+    container.appendChild(empty);
+    return;
+  }
+  capable.forEach((inst) => {
+    const label = document.createElement("label");
+    label.className = "toggle-row";
+    const span = document.createElement("span");
+    span.className = "toggle-label";
+    span.textContent = "Kiosk mode for " + inst.name;
+    const switchDiv = document.createElement("div");
+    switchDiv.className = "toggle-switch";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    const slider = document.createElement("span");
+    slider.className = "toggle-slider";
+    switchDiv.appendChild(input);
+    switchDiv.appendChild(slider);
+    label.appendChild(span);
+    label.appendChild(switchDiv);
+    container.appendChild(label);
+    kioskInputs.set(inst.url, input);
+    input.addEventListener("change", () => {
+      emitKioskToggle(inst.url, input.checked);
+      showKioskNote("");
+    });
+  });
+}
+
+function initKiosk() {
+  if (!document.getElementById("kiosk-note")) return;
+  if (!window.perseaShell || !window.perseaShell.on) return;
+  window.perseaShell.on(KIOSK_TOGGLE_FAILED_EVENT, (payload) => {
+    const url = payload && payload.instanceUrl;
+    const input = url && kioskInputs.get(url);
+    if (input) input.checked = false;
+    showKioskNote(
+      url && payload.reason
+        ? "Kiosk mode could not be enabled for this server: " + payload.reason + "."
+        : "Kiosk mode could not be enabled."
+    );
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /* Appearance                                                         */
@@ -574,3 +653,4 @@ initHeader();
 initNotifications();
 initGpuAcceleration();
 initInsecureTls();
+initKiosk();
