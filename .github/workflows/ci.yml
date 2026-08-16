@@ -17,7 +17,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
@@ -51,7 +51,7 @@ jobs:
     name: cargo audit
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: rustfmt, clippy
