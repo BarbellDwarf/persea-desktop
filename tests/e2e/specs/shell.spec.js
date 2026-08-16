@@ -28,6 +28,11 @@ module.exports = async function () {
     await driver.findElement(By.id("welcome-name")).sendKeys("E2E UI");
     await driver.findElement(By.id("welcome-url")).sendKeys(BASE);
     await driver.findElement(By.id("welcome-form")).submit();
+    await new Promise((r) => setTimeout(r, 8000));
+    const probeNow = await driver
+      .executeScript("return (document.getElementById('welcome-probe')?.innerText || 'NO PROBE EL').slice(0, 500)")
+      .catch(() => "EVAL FAILED");
+    console.log("DIAG welcome-probe @8s:", JSON.stringify(probeNow));
     try {
       await waitForText(driver, "Server version", 20000);
     } catch (err) {
