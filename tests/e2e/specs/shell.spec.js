@@ -25,9 +25,17 @@ module.exports = async function () {
     // ACL-gated instances_add + probe path end to end (regression for
     // "Command instances_add not allowed by ACL").
     const { By } = require("selenium-webdriver");
-    await driver.findElement(By.id("welcome-name")).sendKeys("E2E UI");
-    await driver.findElement(By.id("welcome-url")).sendKeys(BASE);
-    await driver.findElement(By.id("welcome-form")).submit();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await driver.findElement(By.id("welcome-name")).sendKeys("E2E UI");
+        await driver.findElement(By.id("welcome-url")).sendKeys(BASE);
+        await driver.findElement(By.id("welcome-form")).submit();
+        break;
+      } catch (err) {
+        if (attempt === 2) throw err;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
     await new Promise((r) => setTimeout(r, 8000));
     const probeNow = await driver
       .executeScript("return (document.getElementById('welcome-probe')?.innerText || 'NO PROBE EL').slice(0, 500)")

@@ -120,7 +120,36 @@ async function newSession() {
       "wdio:tauriServiceOptions": { windowLabel: "main" },
     })
     .forBrowser("wry");
-  return builder.build();
+  const driver = builder.build();
+  if (IS_MACOS) {
+    // The embedded WebDriver server binds before the app finishes
+    // startup (main window, webview, initial navigation), so early
+    // commands can hit a half-created page and the startup can reload
+    // the webview under the session. Wait until the shell page is
+    // present and stable across two reads before handing the driver out.
+    const deadline = Date.now() + 30000;
+    for (;;) {
+      const first = await driver
+        .executeScript(
+          "return { url: location.href, ready: document.readyState, form: !!document.getElementById('welcome-form') }",
+        )
+        .catch(() => null);
+      await new Promise((r) => setTimeout(r, 600));
+      const second = await driver
+        .executeScript("return { url: location.href, ready: document.readyState }")
+        .catch(() => null);
+      const stable =
+        first &&
+        second &&
+        first.url === second.url &&
+        first.ready === "complete" &&
+        second.ready === "complete";
+      if (stable || Date.now() > deadline) {
+        break;
+      }
+    }
+  }
+  return driver;
 }
 
 async function stopDriver() {
