@@ -87,8 +87,9 @@ impl ShellHttp {
             .timeout(REQUEST_TIMEOUT)
             .connect_timeout(CONNECT_TIMEOUT)
             .user_agent(concat!("persea-desktop/", env!("CARGO_PKG_VERSION")))
+            .danger_accept_invalid_certs(crate::shell_config::allow_insecure_tls())
             .build()
-            .expect("reqwest client with static options cannot fail");
+            .expect("reqwest client build cannot fail");
         Self {
             client,
             csrf: Mutex::new(HashMap::new()),

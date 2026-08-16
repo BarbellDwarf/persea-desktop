@@ -97,6 +97,9 @@ const BOOTSTRAP_PATH: &str = "/api/auth/status";
 const PROGRESS_POLL_MS: u64 = 200;
 /// Read chunk size.
 const READ_CHUNK_BYTES: usize = 1024 * 1024;
+/// Download flush cadence: response chunks are batched to this size
+/// before the blocking writer sees them.
+const STREAM_FLUSH_BYTES: usize = 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -297,8 +300,9 @@ impl DriveClient {
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(8))
             .user_agent(concat!("persea-desktop/", env!("CARGO_PKG_VERSION")))
+            .danger_accept_invalid_certs(crate::shell_config::allow_insecure_tls())
             .build()
-            .expect("reqwest client with static options cannot fail");
+            .expect("reqwest client build cannot fail");
         Self {
             client,
             csrf: Mutex::new(HashMap::new()),
@@ -424,18 +428,21 @@ impl DriveClient {
         Ok(self.finish(resp).await)
     }
 
-    /// GET a drive file's raw bytes (download).
-    pub async fn download(
+    /// GET a drive file, streaming the body to `dest`. The file is
+    /// created fresh; chunks are handed to a blocking writer so large
+    /// files never land in memory whole.
+    pub async fn download_to(
         &self,
         instance: &str,
         session_id: &str,
         name: &str,
         bearer: &str,
-    ) -> Result<Vec<u8>, String> {
+        dest: &Path,
+    ) -> Result<u64, String> {
         let url = self
             .drive_url(instance, session_id, Some(name))
             .map_err(|e| e.to_string())?;
-        let resp = self
+        let mut resp = self
             .client
             .get(url)
             .header(header::AUTHORIZATION, format!("Bearer {bearer}"))
@@ -443,25 +450,53 @@ impl DriveClient {
             .await
             .map_err(|e| format!("request failed: {e}"))?;
         let status = resp.status();
-        let body = resp
-            .bytes()
-            .await
-            .map_err(|e| format!("failed to read download body: {e}"))?
-            .to_vec();
-        if status.is_success() {
-            Ok(body)
-        } else {
+        if !status.is_success() {
+            let body = resp.chunk().await.ok().flatten().unwrap_or_default();
             let parsed = serde_json::from_slice::<serde_json::Value>(&body)
                 .unwrap_or(serde_json::Value::Null);
-            Err(format!(
+            return Err(format!(
                 "download failed (HTTP {}): {}",
                 status.as_u16(),
                 parsed
                     .get("error")
                     .and_then(|e| e.as_str())
                     .unwrap_or("unknown error")
-            ))
+            ));
         }
+        let dest = dest.to_path_buf();
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        let writer = tauri::async_runtime::spawn_blocking(move || -> Result<u64, String> {
+            use std::io::Write;
+            let mut file = std::fs::File::create(&dest)
+                .map_err(|e| format!("cannot create {}: {e}", dest.display()))?;
+            let mut written: u64 = 0;
+            for chunk in rx {
+                file.write_all(&chunk)
+                    .map_err(|e| format!("cannot write {}: {e}", dest.display()))?;
+                written += chunk.len() as u64;
+            }
+            Ok(written)
+        });
+        let mut buffered: Vec<u8> = Vec::new();
+        while let Some(chunk) = resp
+            .chunk()
+            .await
+            .map_err(|e| format!("failed to read download body: {e}"))?
+        {
+            buffered.extend_from_slice(&chunk);
+            if buffered.len() >= STREAM_FLUSH_BYTES
+                && tx.send(std::mem::take(&mut buffered)).is_err()
+            {
+                break;
+            }
+        }
+        if !buffered.is_empty() {
+            let _ = tx.send(buffered);
+        }
+        drop(tx);
+        writer
+            .await
+            .map_err(|e| format!("write task failed: {e}"))?
     }
 
     async fn finish(&self, resp: reqwest::Response) -> DriveResponse {
@@ -832,6 +867,7 @@ pub fn spawn_upload(
                     t.bytes_total = total;
                     t.bytes_done = total;
                 });
+                crate::notify::transfer_complete(&app, &remote_name);
             }
             Err(error) => {
                 with_row(id, |t| {
@@ -968,16 +1004,9 @@ pub async fn download_drive_file(
     let bearer = pairing::token_for(&app, &instance)
         .await
         .ok_or_else(|| "no paired token for this instance".to_string())?;
-    let bytes = drive_client()
-        .download(&instance, &session_id, &name, &bearer)
+    let total = drive_client()
+        .download_to(&instance, &session_id, &name, &bearer, &path)
         .await?;
-    let total = bytes.len() as u64;
-    let saved = path.clone();
-    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        std::fs::write(&saved, &bytes).map_err(|e| format!("cannot write {}: {e}", saved.display()))
-    })
-    .await
-    .map_err(|e| format!("write task failed: {e}"))??;
     push_row(Transfer {
         id: 0,
         direction: TransferDirection::Download,
@@ -1225,12 +1254,16 @@ pub fn cmd_transfer_open_folder(id: u64) -> Result<(), String> {
         .map_err(|e| format!("cannot open folder: {e}"))
 }
 
-/// Remove finished rows (done / failed / cancelled) from the list.
+/// Remove finished rows (done / failed / cancelled) from the list and
+/// broadcast the new list so the transfer window re-renders
+/// immediately (the page refreshes on the event or on this return).
 #[tauri::command]
-pub fn cmd_transfer_clear_finished() -> Result<(), String> {
+pub fn cmd_transfer_clear_finished(app: AppHandle) -> Vec<TransferView> {
     let mut rows = registry();
     rows.retain(|t| !t.status.finished());
-    Ok(())
+    drop(rows);
+    emit_changed(&app);
+    transfers_view()
 }
 
 /// Shell-side download of a drive file: REST fetch with the paired
@@ -1483,6 +1516,17 @@ mod tests {
         );
     }
 
+    fn tmp_download_path(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "persea-desktop-transfer-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
     #[test]
     fn download_round_trips_bytes() {
         let server = MockServer::start(MockScript::new(vec![MockResponse {
@@ -1495,13 +1539,16 @@ mod tests {
             body: "hello drive".to_string(),
         }]));
         let client = DriveClient::new();
-        let bytes = tauri::async_runtime::block_on(async {
+        let dest = tmp_download_path("roundtrip");
+        let total = tauri::async_runtime::block_on(async {
             client
-                .download(&server.url(), "sess-1", "x.txt", "tkn-1")
+                .download_to(&server.url(), "sess-1", "x.txt", "tkn-1", &dest)
                 .await
         })
         .unwrap();
-        assert_eq!(bytes, b"hello drive");
+        assert_eq!(total, 11);
+        assert_eq!(std::fs::read(&dest).unwrap(), b"hello drive");
+        let _ = std::fs::remove_file(&dest);
         let requests = server.requests();
         assert_eq!(requests[0].path, "/api/sessions/sess-1/drive-files/x.txt");
         assert_eq!(
@@ -1518,12 +1565,14 @@ mod tests {
             "file not found",
         )]));
         let client = DriveClient::new();
+        let dest = tmp_download_path("error");
         let err = tauri::async_runtime::block_on(async {
             client
-                .download(&server.url(), "sess-1", "x.txt", "tkn-1")
+                .download_to(&server.url(), "sess-1", "x.txt", "tkn-1", &dest)
                 .await
         })
         .unwrap_err();
+        assert!(!dest.exists());
         assert!(err.contains("404"));
         assert!(err.contains("file not found"));
     }

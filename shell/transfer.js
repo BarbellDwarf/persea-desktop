@@ -210,7 +210,9 @@
   }
 
   CLEAR.addEventListener("click", () => {
-    invoke("cmd_transfer_clear_finished").catch(() => {});
+    invoke("cmd_transfer_clear_finished")
+      .then(onTransfersChanged)
+      .catch(() => {});
   });
 
   function onTransfersChanged(payload) {
