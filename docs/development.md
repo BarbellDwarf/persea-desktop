@@ -199,3 +199,5 @@ How the release pipeline works and how to cut a release:
 [release.md](release.md). The beta channel: [beta.md](beta.md). The
 enterprise provisioning contract (schema, delivery paths, trust
 rules): [provisioning.md](provisioning.md).
+
+- pages.spec.js (shell page-render checks)
