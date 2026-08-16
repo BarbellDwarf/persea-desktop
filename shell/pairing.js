@@ -119,6 +119,9 @@ function showTerminal(message, withRetry) {
 
 function renderDialogState(state) {
   if (!state) return;
+  if (state.status !== "waiting") {
+    stopUiPoll();
+  }
   switch (state.status) {
     case "waiting":
       showWaiting(state);
@@ -166,7 +169,9 @@ async function pollDialogUi() {
 
 async function startPairing() {
   stopUiPoll();
-  dialog.showModal();
+  if (!dialog.open) {
+    dialog.showModal();
+  }
   currentCode = null;
   statusEl.textContent = "Contacting the server…";
   codeEl.classList.add("hidden");
@@ -175,13 +180,16 @@ async function startPairing() {
   retryBtn.classList.add("hidden");
   cancelBtn.textContent = "Cancel";
   cancelBtn.classList.remove("hidden");
+  let state;
   try {
-    const state = await invoke("pairing_start", { instanceUrl: instanceUrl });
-    renderDialogState(state);
+    state = await invoke("pairing_start", { instanceUrl: instanceUrl });
   } catch (err) {
-    renderDialogState({ status: "failed", message: String(err) });
+    state = { status: "failed", message: String(err) };
   }
-  uiTimer = setInterval(pollDialogUi, UI_POLL_MS);
+  renderDialogState(state);
+  if (state && state.status === "waiting") {
+    uiTimer = setInterval(pollDialogUi, UI_POLL_MS);
+  }
 }
 
 /* Reopens the modal when a pairing is already in flight (the user
