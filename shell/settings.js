@@ -221,7 +221,8 @@ function openAddDialog() {
 function openEditDialog(inst) {
   editingUrl = inst.url;
   dialogTitle.textContent = "Edit server";
-  dialogDesc.textContent = "Changing the URL re-checks the server. Its data store keeps the previous URL's cookies.";
+  dialogDesc.textContent =
+    "Changing the URL re-checks the server. Its data store keeps the previous URL's cookies, and device pairing is tied to the URL, so a renamed server must be paired again.";
   instanceName.value = inst.name;
   instanceUrl.value = inst.url;
   instanceForm.dataset.mode = "edit";
