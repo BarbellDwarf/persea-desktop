@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
       ca-certificates \
       build-essential \
       pkg-config \
+      git \
       nodejs \
       npm \
     && rm -rf /var/lib/apt/lists/*

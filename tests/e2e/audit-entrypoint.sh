@@ -4,8 +4,16 @@
 # later, the equivalent GH Actions job, so it stays self-contained: no
 # host-specific paths, no interactive prompts.
 #
+# The test server is built from the pinned persea ref (the same ref the
+# CI e2e workflow checks out), cloned fresh inside the container, so the
+# audit never depends on the state of a local server checkout. A
+# mounted checkout is used only when PERSEA_SERVER_DIR is set.
+#
 # Env:
-#   PERSEA_SERVER_DIR    mounted persea repo path (required)
+#   PERSEA_SERVER_REF    persea ref to clone and build (default 43215ab,
+#                        matching e2e.yml)
+#   PERSEA_SERVER_DIR    mounted persea repo path; when set, used
+#                        instead of the pinned-ref clone
 #   PERSEA_E2E_SHOTS     screenshot output dir (required)
 #   AUDIT_DEB            1 to build the deb bundle and export
 #                        PERSEA_E2E_DEB for the deb-smoke spec; 0 or
@@ -19,7 +27,6 @@ E2E_DIR="$WORKSPACE/tests/e2e"
 APP_DIR="${PERSEA_E2E_APPS_DIR:-$WORKSPACE/src-tauri/target/debug}"
 APP_BIN="$APP_DIR/persea-desktop"
 
-: "${PERSEA_SERVER_DIR:?PERSEA_SERVER_DIR is required (mounted persea repo)}"
 : "${PERSEA_E2E_SHOTS:?PERSEA_E2E_SHOTS is required (screenshot output dir)}"
 mkdir -p "$PERSEA_E2E_SHOTS"
 
@@ -30,8 +37,19 @@ echo "[audit] installing node deps..."
   npm install --no-package-lock
 )
 
+if [ -n "${PERSEA_SERVER_DIR:-}" ]; then
+  SERVER_DIR="$PERSEA_SERVER_DIR"
+  echo "[audit] using the mounted persea checkout at $SERVER_DIR"
+else
+  REF="${PERSEA_SERVER_REF:-43215ab}"
+  SERVER_DIR="$(mktemp -d /tmp/persea-server.XXXXXX)"
+  echo "[audit] cloning persea at $REF (the pinned e2e ref)..."
+  git clone --no-checkout https://github.com/persea-grove/persea.git "$SERVER_DIR"
+  git -C "$SERVER_DIR" checkout "$REF"
+fi
+
 echo "[audit] provisioning the persea server on 8099..."
-PROVISION_OUT="$(bash "$E2E_DIR/provision-server.sh" "$PERSEA_SERVER_DIR" 8099)"
+PROVISION_OUT="$(bash "$E2E_DIR/provision-server.sh" "$SERVER_DIR" 8099)"
 export "$(printf '%s\n' "$PROVISION_OUT" | grep '^PERSEA_E2E')"
 # The server stays up for the whole run; the container exits afterwards.
 trap 'kill "${PERSEA_E2E_PID:-}" 2>/dev/null || true' EXIT
@@ -65,10 +83,14 @@ else
 fi
 
 echo "[audit] running the E2E specs under xvfb..."
-(
+if ! (
   cd "$E2E_DIR"
   xvfb-run -a node run-specs.js
-)
+); then
+  echo "[audit] spec run failed; server log tail:"
+  tail -40 "${PERSEA_E2E_WORK:-/nonexistent}/persea.log" 2>/dev/null || true
+  exit 1
+fi
 
 echo
 echo "[audit] screenshots: $PERSEA_E2E_SHOTS"

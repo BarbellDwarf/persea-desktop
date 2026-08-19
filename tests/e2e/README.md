@@ -37,23 +37,27 @@ A display is required on Linux (use `xvfb-run` on headless boxes).
 The whole local run in one command, with no host tooling beyond docker:
 
 ```bash
-./tests/e2e/audit.sh /path/to/persea
+./tests/e2e/audit.sh
 ```
 
 `audit.sh` builds the audit image on first use (rust, node, xvfb,
 tauri-driver, tauri-cli, and the same apt deps as `e2e.yml`), then runs
-`audit-entrypoint.sh` in a container that mounts this repo at `/workspace`
-and the persea repo at `/persea`. The cargo target dir and the npm install
+`audit-entrypoint.sh` in a container that mounts this repo at `/workspace`.
+The test persea server is built from the pinned e2e ref (the same ref the
+CI workflow checks out), cloned fresh inside the container, so the audit
+never depends on the state of a local server checkout. To build from a
+local server checkout instead (server-development testing), pass
+`--server-dir /path/to/persea`. The cargo target dir and the npm install
 live in named volumes, so repeat runs reuse the build. Screenshots land in
 `./audit-shots` under this repo, or wherever `PERSEA_E2E_SHOTS` points on
-the host. The first run also builds the persea server, which writes its
-target dir into the mounted persea repo. Pass `--no-deb` to skip the deb
-bundle; that step is a full release build and the slowest part of the run.
+the host. Pass `--no-deb` to skip the deb bundle; that step is a full
+release build and the slowest part of the run.
 
 The entrypoint is the single contract and mirrors the CI job step by step:
 
 1. `npm install` in `tests/e2e` (never writes a lockfile into the checkout)
-2. provision the persea server via `provision-server.sh` on port 8099
+2. clone the pinned persea ref (or use the mounted checkout) and provision
+   the server via `provision-server.sh` on port 8099
 3. `cargo build` the app in `src-tauri` unless a binary already exists at
    `PERSEA_E2E_APPS_DIR` (default `src-tauri/target/debug`)
 4. when `AUDIT_DEB=1`, build the deb bundle and export `PERSEA_E2E_DEB`
@@ -61,9 +65,11 @@ The entrypoint is the single contract and mirrors the CI job step by step:
 5. run `xvfb-run -a node run-specs.js` with the provisioned env and print
    the screenshot dir
 
-Required entrypoint env: `PERSEA_SERVER_DIR` (the mounted persea repo) and
-`PERSEA_E2E_SHOTS`. Optional: `AUDIT_DEB` (defaults to 0) and
-`PERSEA_E2E_APPS_DIR`. The entrypoint exits non-zero when the suite fails.
+Required entrypoint env: `PERSEA_E2E_SHOTS`. Optional: `PERSEA_SERVER_REF`
+(default `43215ab`, the pinned e2e ref), `PERSEA_SERVER_DIR` (mounted
+checkout), `AUDIT_DEB` (defaults to 0) and `PERSEA_E2E_APPS_DIR`. The
+entrypoint exits non-zero when the suite fails and tails the server log
+to help diagnose.
 
 The same container becomes the GH Actions job later: the job runs the
 entrypoint as its run step (a `docker run` with the checkout mounted at
