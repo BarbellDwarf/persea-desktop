@@ -50,7 +50,11 @@ fi
 
 echo "[audit] provisioning the persea server on 8099..."
 PROVISION_OUT="$(bash "$E2E_DIR/provision-server.sh" "$SERVER_DIR" 8099)"
-export "$(printf '%s\n' "$PROVISION_OUT" | grep '^PERSEA_E2E')"
+# Export each PERSEA_E2E_* line separately: a single quoted export would
+# fold the whole multi-line output into one value.
+while IFS= read -r line; do
+  export "$line"
+done <<< "$(printf '%s\n' "$PROVISION_OUT" | grep '^PERSEA_E2E')"
 # The server stays up for the whole run; the container exits afterwards.
 trap 'kill "${PERSEA_E2E_PID:-}" 2>/dev/null || true' EXIT
 echo "[audit] server ready at $PERSEA_E2E_BASE_URL"
