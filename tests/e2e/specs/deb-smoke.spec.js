@@ -64,8 +64,10 @@ module.exports = async function () {
       // not installed yet
     }
     if (!preinstalled) {
-      run("dpkg", ["-i", DEB], { stdio: "inherit" });
+      // Mark before the install so a failed dpkg -i (dependency
+      // problems) still gets cleaned up in finally.
       installed = true;
+      run("dpkg", ["-i", DEB], { stdio: "inherit" });
     } else {
       console.log(`deb-smoke: package ${pkg} was already installed; reusing it`);
     }

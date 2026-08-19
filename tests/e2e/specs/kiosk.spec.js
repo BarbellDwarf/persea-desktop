@@ -64,7 +64,13 @@ module.exports = async function () {
       },
       20000,
       "the instance probe did not complete",
-    );
+    ).catch(async (err) => {
+      const list = await invoke(driver, "cmd_instances_list").catch(() => []);
+      const probe = Array.isArray(list) && list[0] ? list[0].probe : null;
+      throw new Error(
+        `${err.message}; probe state: ${JSON.stringify(probe)}`,
+      );
+    });
 
     // Normal state before entry: hotkeys enabled, window not fullscreen.
     const before = await hotkeysView(driver);
