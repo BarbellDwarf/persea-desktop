@@ -162,10 +162,16 @@ async function stopDriver() {
 function screenshot(driver, name) {
   const dir = process.env.PERSEA_E2E_SHOTS || "docs/screenshots";
   mkdirSync(dir, { recursive: true });
-  return driver.takeScreenshot().then((png) => {
-    const fs = require("fs");
-    fs.writeFileSync(`${dir}/${name}.png`, Buffer.from(png, "base64"));
-  });
+  // Headless containers render without a GPU (WebKitGTK logs DRI3
+  // errors and falls back to software compositing), so the compositor
+  // can lag a navigation: a capture right after a DOM wait sometimes
+  // returns the previous frame. Settle before capturing.
+  return new Promise((resolve) => setTimeout(resolve, 1500)).then(() =>
+    driver.takeScreenshot().then((png) => {
+      const fs = require("fs");
+      fs.writeFileSync(`${dir}/${name}.png`, Buffer.from(png, "base64"));
+    }),
+  );
 }
 
 // Pre-seed the shell's instance store before the app launches. The
