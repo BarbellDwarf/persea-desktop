@@ -67,8 +67,16 @@ module.exports = async function () {
     ).catch(async (err) => {
       const list = await invoke(driver, "cmd_instances_list").catch(() => []);
       const probe = Array.isArray(list) && list[0] ? list[0].probe : null;
+      let pageText = "";
+      try {
+        pageText = await driver.executeScript(
+          "return (document.body && document.body.innerText || '').slice(0, 800)",
+        );
+      } catch {
+        // the page may be gone; the probe state still carries the signal
+      }
       throw new Error(
-        `${err.message}; probe state: ${JSON.stringify(probe)}`,
+        `${err.message}; probe state: ${JSON.stringify(probe)}; page: ${JSON.stringify(pageText)}`,
       );
     });
 
