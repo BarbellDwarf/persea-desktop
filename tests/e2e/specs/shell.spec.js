@@ -53,6 +53,7 @@ module.exports = async function () {
     // the empty/try-again state (no server round trip needed).
     await driver.get(`${SHELL_ORIGIN}/pairing.html?url=${encodeURIComponent(BASE)}`);
     await waitForText(driver, "Pair this device");
+    console.log(`shell: pairing page url=${await driver.getCurrentUrl()}`);
     await screenshot(driver, "shell-pairing");
 
     console.log("shell: welcome, settings, pairing states verified");
