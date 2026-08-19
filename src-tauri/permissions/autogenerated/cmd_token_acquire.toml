@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cmd-token-acquire"
+description = "Enables the cmd_token_acquire command without any pre-configured scope."
+commands.allow = ["cmd_token_acquire"]
+
+[[permission]]
+identifier = "deny-cmd-token-acquire"
+description = "Denies the cmd_token_acquire command without any pre-configured scope."
+commands.deny = ["cmd_token_acquire"]
