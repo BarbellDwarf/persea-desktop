@@ -15,6 +15,7 @@ mod platform;
 mod poller;
 mod provisioning;
 mod shell_config;
+mod token_store;
 mod transfer;
 mod tray;
 mod windows;
@@ -196,6 +197,7 @@ pub fn run() {
             keyring::keyring_get,
             keyring::keyring_delete,
             keyring::keyring_tier,
+            token_store::cmd_token_acquire,
             hotkeys::cmd_hotkeys_get_settings,
             hotkeys::cmd_hotkeys_set_shortcut,
             pairing::pairing_supported,
