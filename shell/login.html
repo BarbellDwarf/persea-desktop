@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log in · Persea Desktop</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body class="settings-page">
+  <header class="settings-header">
+    <h1>Log in</h1>
+    <div class="header-actions">
+      <a class="btn btn-ghost" href="settings.html">Settings</a>
+      <a class="btn btn-ghost" href="index.html">Home</a>
+    </div>
+  </header>
+
+  <main class="settings-sections">
+    <section class="settings-section" id="sec-login" aria-labelledby="sec-login-title">
+      <h2 id="sec-login-title">Sign in to this server</h2>
+      <p class="section-desc">
+        Enter the credentials for the server account. The shell stores the
+        scoped token it receives in the OS keychain and uses it to act on
+        the server on your behalf.
+      </p>
+      <form id="login-form" class="login-form">
+        <label for="login-instance">Server</label>
+        <input type="text" id="login-instance" readonly>
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" name="username" autocomplete="username" required>
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+        <button type="submit" class="btn btn-accent" id="login-submit">Log in</button>
+      </form>
+      <p id="login-status" class="probe-pending" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>

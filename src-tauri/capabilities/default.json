@@ -79,6 +79,7 @@
     "allow-pairing-cancel",
     "allow-pairing-open-confirm-page",
     "allow-pairing-list-tokens",
-    "allow-pairing-revoke"
+    "allow-pairing-revoke",
+    "allow-cmd-token-acquire"
   ]
 }
