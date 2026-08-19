@@ -64,10 +64,12 @@ module.exports = async function () {
       // not installed yet
     }
     if (!preinstalled) {
-      // Mark before the install so a failed dpkg -i (dependency
-      // problems) still gets cleaned up in finally.
+      // Mark before the install so a failed install still gets cleaned
+      // up in finally. apt-get resolves the deb's dependencies from the
+      // configured repos (dpkg -i alone would leave it half-installed
+      // when a dependency is missing).
       installed = true;
-      run("dpkg", ["-i", DEB], { stdio: "inherit" });
+      run("apt-get", ["install", "-y", DEB], { stdio: "inherit" });
     } else {
       console.log(`deb-smoke: package ${pkg} was already installed; reusing it`);
     }
