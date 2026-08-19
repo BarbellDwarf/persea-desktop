@@ -22,6 +22,7 @@ module.exports = async function () {
       { url: "/pairing.html", text: "Device pairing", name: "pairing" },
       { url: "/transfer.html", text: "Transfers", name: "transfer" },
       { url: "/dropzone.html", text: "Drop to send files", name: "dropzone" },
+      { url: "/login.html", text: "Log in", name: "login" },
     ];
     for (const page of pages) {
       await driver.get(`${SHELL_ORIGIN}${page.url}`);
