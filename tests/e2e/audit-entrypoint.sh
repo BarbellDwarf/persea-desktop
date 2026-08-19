@@ -91,11 +91,28 @@ if ! curl -fsS "http://127.0.0.1:8099/api/health" >/dev/null 2>&1; then
   tail -40 "${PERSEA_E2E_WORK:-/nonexistent}/persea.log" 2>/dev/null || true
   exit 1
 fi
+echo "[audit] server pid ${PERSEA_E2E_PID:-unknown}; work dir ${PERSEA_E2E_WORK:-unknown}"
+if [ -n "${PERSEA_E2E_PID:-}" ] && kill -0 "$PERSEA_E2E_PID" 2>/dev/null; then
+  echo "[audit] server process alive"
+else
+  echo "[audit] server process DEAD (pid ${PERSEA_E2E_PID:-unknown})"
+fi
+if [ -f "${PERSEA_E2E_WORK:-/nonexistent}/persea.log" ]; then
+  echo "[audit] server log size: $(wc -c < "${PERSEA_E2E_WORK}/persea.log") bytes"
+else
+  echo "[audit] server log missing at ${PERSEA_E2E_WORK:-unset}/persea.log"
+fi
 if ! (
   cd "$E2E_DIR"
   xvfb-run -a node run-specs.js
 ); then
-  echo "[audit] spec run failed; server log tail:"
+  echo "[audit] spec run failed; server process:"
+  if [ -n "${PERSEA_E2E_PID:-}" ] && kill -0 "$PERSEA_E2E_PID" 2>/dev/null; then
+    echo "[audit] server process still alive"
+  else
+    echo "[audit] server process DEAD (pid ${PERSEA_E2E_PID:-unknown})"
+  fi
+  echo "[audit] server log tail:"
   tail -40 "${PERSEA_E2E_WORK:-/nonexistent}/persea.log" 2>/dev/null || true
   exit 1
 fi
