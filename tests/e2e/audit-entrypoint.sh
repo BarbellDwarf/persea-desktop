@@ -68,19 +68,25 @@ fi
 export PERSEA_E2E_APPS_DIR="$APP_DIR"
 
 if [ "${AUDIT_DEB:-0}" = "1" ]; then
-  echo "[audit] building the deb bundle (release)..."
-  (
-    cd "$WORKSPACE/src-tauri"
-    # CI mode avoids interactive prompts; updater artifacts are skipped
-    # because the signing key only exists in the release secrets.
-    CI=true cargo tauri build --bundles deb \
-      --config '{"bundle":{"createUpdaterArtifacts":false}}'
-  )
   shopt -s nullglob
   DEBS=("$WORKSPACE/src-tauri/target/release/bundle/deb"/*.deb)
-  [ "${#DEBS[@]}" -gt 0 ] || { echo "[audit] deb build produced no .deb" >&2; exit 1; }
-  export PERSEA_E2E_DEB="${DEBS[0]}"
-  echo "[audit] deb bundle: $PERSEA_E2E_DEB"
+  if [ "${#DEBS[@]}" -gt 0 ] && [ ! "$APP_BIN" -nt "${DEBS[0]}" ]; then
+    echo "[audit] reusing the existing deb bundle: ${DEBS[0]}"
+    export PERSEA_E2E_DEB="${DEBS[0]}"
+  else
+    echo "[audit] building the deb bundle (release)..."
+    (
+      cd "$WORKSPACE/src-tauri"
+      # CI mode avoids interactive prompts; updater artifacts are skipped
+      # because the signing key only exists in the release secrets.
+      CI=true cargo tauri build --bundles deb \
+        --config '{"bundle":{"createUpdaterArtifacts":false}}'
+    )
+    DEBS=("$WORKSPACE/src-tauri/target/release/bundle/deb"/*.deb)
+    [ "${#DEBS[@]}" -gt 0 ] || { echo "[audit] deb build produced no .deb" >&2; exit 1; }
+    export PERSEA_E2E_DEB="${DEBS[0]}"
+    echo "[audit] deb bundle: $PERSEA_E2E_DEB"
+  fi
 else
   echo "[audit] skipping the deb bundle (AUDIT_DEB is not 1)"
   unset PERSEA_E2E_DEB || true
