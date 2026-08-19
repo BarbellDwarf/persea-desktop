@@ -79,7 +79,6 @@ pub fn run() {
                 .map(|i| i.url.clone())
                 .collect();
             let default_url = origins.first().cloned().unwrap_or_default();
-            let _policy = navigation::NavigationPolicy::new(origins.clone(), Vec::new());
             // tauri-driver (Windows e2e) needs the WebView2 DevTools port
             // file in the DEFAULT user data folder: msedgedriver reads it
             // from there. A custom per-instance data directory hides it
