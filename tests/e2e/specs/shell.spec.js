@@ -42,6 +42,13 @@ module.exports = async function () {
     await waitForText(driver, "Server version", 20000);
     await screenshot(driver, "shell-welcome-added");
 
+    // A server added at runtime must be navigable in the webview without
+    // a restart: the navigation lockdown derives from the live instance
+    // store, so "Open server" loads the server's login page.
+    await driver.findElement(By.id("welcome-open")).click();
+    await waitForText(driver, "Sign in", 20000);
+    await screenshot(driver, "shell-welcome-opened");
+
     // The welcome flow opens the settings page for the guided add.
     // (The add-instance form lives in settings; this spec drives the
     //  form only when the instance store is empty, so it is idempotent.)

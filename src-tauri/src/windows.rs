@@ -74,8 +74,8 @@
 //!    auto-open call. `windows::setup` needs the main window to exist.
 //! 2. Replace `navigation::lock_window_builder(builder, policy)` on the
 //!    main window with `windows::lock_viewport_builder(builder,
-//!    app.handle().clone())` (the manager rebuilds the navigation policy
-//!    from the instance store at setup; the main window must not
+//!    app.handle().clone())` (the navigation policy is derived from the
+//!    live instance store on every navigation; the main window must not
 //!    double-apply the plain handlers).
 //! 3. Register the `cmd_tabs_*` / `cmd_monitors_*` commands in
 //!    `tauri::generate_handler!`.
@@ -1137,7 +1137,6 @@ fn save_prefs(
 struct WindowManager {
     app: tauri::AppHandle,
     state: TabState,
-    policy: NavigationPolicy,
     /// Shell-side strip override (kiosk mode hides the strip).
     strip_enabled: bool,
 }
@@ -1164,13 +1163,13 @@ fn send(msg: Msg) -> Result<(), String> {
 }
 
 fn current_policy() -> NavigationPolicy {
-    manager().map(|m| m.policy.clone()).unwrap_or_else(|| {
-        let origins: Vec<String> = crate::instances::instances()
-            .iter()
-            .map(|i| i.url.clone())
-            .collect();
-        NavigationPolicy::new(origins, Vec::new())
-    })
+    // Derived from the live instance store on every navigation, so a
+    // server added at runtime is immediately navigable in the webview.
+    let origins: Vec<String> = crate::instances::instances()
+        .iter()
+        .map(|i| i.url.clone())
+        .collect();
+    NavigationPolicy::new(origins, Vec::new())
 }
 
 /// The canonical per-instance webview data directory + store identifier.
@@ -1287,11 +1286,6 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&config_dir)?;
     let prefs = load_prefs(&config_dir);
     let (default_mode, overrides) = prefs_to_state(&prefs);
-    let origins: Vec<String> = crate::instances::instances()
-        .iter()
-        .map(|i| i.url.clone())
-        .collect();
-    let policy = NavigationPolicy::new(origins.clone(), Vec::new());
     let mut state = TabState::new(default_mode);
     state.overrides = overrides;
 
@@ -1303,7 +1297,6 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let manager = WindowManager {
         app: app_handle.clone(),
         state,
-        policy,
         strip_enabled: true,
     };
     let _ = MANAGER.set(Mutex::new(manager));
