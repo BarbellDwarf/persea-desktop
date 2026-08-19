@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 IMAGE="persea-desktop-audit:latest"
 TARGET_VOLUME="persea-audit-target"
 CARGO_VOLUME="persea-audit-cargo"
