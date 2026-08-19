@@ -83,6 +83,14 @@ else
 fi
 
 echo "[audit] running the E2E specs under xvfb..."
+# Re-check the server before the specs: the builds above take tens of
+# minutes, and a server that died in between would fail every
+# server-dependent spec with a confusing timeout.
+if ! curl -fsS "http://127.0.0.1:8099/api/health" >/dev/null 2>&1; then
+  echo "[audit] the test server is not responding before the spec run; log tail:"
+  tail -40 "${PERSEA_E2E_WORK:-/nonexistent}/persea.log" 2>/dev/null || true
+  exit 1
+fi
 if ! (
   cd "$E2E_DIR"
   xvfb-run -a node run-specs.js

@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y \
       xvfb \
       openssh-server \
       webkit2gtk-driver \
+      gstreamer1.0-libav \
+      gstreamer1.0-plugins-bad \
       curl \
       ca-certificates \
       build-essential \
