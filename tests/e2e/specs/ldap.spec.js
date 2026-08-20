@@ -17,6 +17,20 @@ async function waitForText(driver, text, timeoutMs = 20000) {
   await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), '${text}')]`)), timeoutMs);
 }
 
+// The webview cookie store persists across app instances, so an earlier
+// spec's login can land here on the dashboard. Log out through the
+// header button (POST with CSRF) and wait for the login page.
+async function ensureLoginPage(driver) {
+  const { until, By } = require("selenium-webdriver");
+  try {
+    await waitForText(driver, "Sign in", 8000);
+  } catch {
+    await driver.wait(until.elementLocated(By.id("logout-btn")), 10000);
+    await driver.findElement(By.id("logout-btn")).click();
+    await waitForText(driver, "Sign in", 15000);
+  }
+}
+
 module.exports = async function () {
   if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
     console.log(
@@ -32,7 +46,7 @@ module.exports = async function () {
     // Log in as admin in the webview, then check the provider list via
     // the API with the same session (the spec process talks to the
     // server directly; node fetch keeps the cookie manually).
-    await waitForText(driver, "Sign in");
+    await ensureLoginPage(driver);
     await driver.findElement(By.id("username")).sendKeys(ADMIN_EMAIL);
     await driver.findElement(By.id("password")).sendKeys(ADMIN_PASSWORD);
     await driver.findElement(By.id("login-form")).submit();
@@ -90,7 +104,18 @@ module.exports = async function () {
     await driver.findElement(By.id("username")).sendKeys(LDAP_USERNAME);
     await driver.findElement(By.id("password")).sendKeys(LDAP_PASSWORD);
     await driver.findElement(By.id("login-form")).submit();
-    await waitForText(driver, "Connections");
+    try {
+      await waitForText(driver, "Connections");
+    } catch (err) {
+      // Surface the server's verdict: a redirect like
+      // /?error=user_lookup_failed pinpoints the failure (a server-side
+      // LDAP subject bug, persea#235, made this fail historically).
+      const url = await driver.getCurrentUrl().catch(() => "unknown");
+      const text = await driver
+        .executeScript("return (document.body && document.body.innerText || '').slice(0, 300)")
+        .catch(() => "");
+      throw new Error(`${err.message}; after LDAP login url=${url}; page: ${JSON.stringify(text)}`);
+    }
     await screenshot(driver, "ldap-dashboard");
 
     console.log("ldap: LDAP-backed login verified");
