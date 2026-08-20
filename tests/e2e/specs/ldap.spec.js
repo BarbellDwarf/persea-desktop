@@ -1,0 +1,97 @@
+// LDAP-backed login: with the LDAP provider configured on the server
+// (admin auth page; the running chain needs a restart to pick it up),
+// log out of the webview and log in with the LDAP test account, then
+// verify the dashboard loads. Skips with a named reason when the
+// provider is not configured. Credentials match the server test fixtures
+// (tests/fixtures/ldap-seed.ldif: alice / alice-ldap-password-2026).
+const { newSession, screenshot, seedInstances } = require("../driver");
+
+const BASE = process.env.PERSEA_E2E_BASE_URL;
+const ADMIN_EMAIL = process.env.PERSEA_E2E_LOGIN_EMAIL;
+const ADMIN_PASSWORD = process.env.PERSEA_E2E_LOGIN_PASSWORD;
+const LDAP_USERNAME = process.env.PERSEA_E2E_LDAP_USERNAME || "alice";
+const LDAP_PASSWORD = process.env.PERSEA_E2E_LDAP_PASSWORD || "alice-ldap-password-2026";
+
+async function waitForText(driver, text, timeoutMs = 20000) {
+  const { until, By } = require("selenium-webdriver");
+  await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), '${text}')]`)), timeoutMs);
+}
+
+module.exports = async function () {
+  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+    console.log(
+      "ldap: skipped, PERSEA_E2E_LOGIN_EMAIL and PERSEA_E2E_LOGIN_PASSWORD are not set",
+    );
+    return;
+  }
+  seedInstances([{ name: "Local", url: BASE, default: true }]);
+  const driver = await newSession();
+  const { By } = require("selenium-webdriver");
+
+  try {
+    // Log in as admin in the webview, then check the provider list via
+    // the API with the same session (the spec process talks to the
+    // server directly; node fetch keeps the cookie manually).
+    await waitForText(driver, "Sign in");
+    await driver.findElement(By.id("username")).sendKeys(ADMIN_EMAIL);
+    await driver.findElement(By.id("password")).sendKeys(ADMIN_PASSWORD);
+    await driver.findElement(By.id("login-form")).submit();
+    await waitForText(driver, "Connections");
+
+    const jar = {};
+    const absorb = (res) => {
+      for (const c of res.headers.getSetCookie ? res.headers.getSetCookie() : []) {
+        const [pair] = c.split(";");
+        const idx = pair.indexOf("=");
+        if (idx > 0) jar[pair.slice(0, idx)] = pair.slice(idx + 1);
+      }
+      return res;
+    };
+    const base = BASE.replace(/\/$/, "");
+    const cookieHeader = () =>
+      Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
+    await absorb(
+      await fetch(`${base}/`, { headers: { cookie: cookieHeader() }, redirect: "manual" }),
+    );
+    await absorb(
+      await fetch(`${base}/auth/login`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: cookieHeader(),
+        },
+        body: new URLSearchParams({
+          csrf_token: jar.csrf_token || "",
+          username: ADMIN_EMAIL,
+          password: ADMIN_PASSWORD,
+        }),
+        redirect: "manual",
+      }),
+    );
+    const providersRes = await fetch(`${base}/api/auth/providers`, {
+      headers: { cookie: cookieHeader() },
+    });
+    const providers = await providersRes.json();
+    const ldapProvider = providers.find((p) => p.provider_type === "ldap" && p.enabled);
+    if (!ldapProvider) {
+      console.log(
+        "ldap: skipped, no enabled LDAP provider on the server (configure it via the admin auth page; the running chain needs a restart)",
+      );
+      return;
+    }
+    console.log(`ldap: provider '${ldapProvider.name}' present`);
+
+    // Log out and log in with the LDAP account.
+    await driver.get(`${BASE}/auth/logout`);
+    await waitForText(driver, "Sign in");
+    await driver.findElement(By.id("username")).sendKeys(LDAP_USERNAME);
+    await driver.findElement(By.id("password")).sendKeys(LDAP_PASSWORD);
+    await driver.findElement(By.id("login-form")).submit();
+    await waitForText(driver, "Connections");
+    await screenshot(driver, "ldap-dashboard");
+
+    console.log("ldap: LDAP-backed login verified");
+  } finally {
+    await driver.quit();
+  }
+};
