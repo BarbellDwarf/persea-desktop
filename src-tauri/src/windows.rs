@@ -1292,17 +1292,28 @@ pub fn build_main_window(
 }
 
 /// Destroy and rebuild the main viewport for `instance_url` so its
-/// webview store matches, then navigate to the instance. The destroy is
-/// async, so the new window is built on the main thread after the old
-/// one is gone.
-pub fn rebuild_main_window(app: &tauri::AppHandle, instance_url: &str) -> Result<(), String> {
+/// webview store matches, then navigate to `navigate_to` (normally the
+/// instance URL itself; the setup flow passes the instance's `/setup`
+/// page). The destroy is async, so the new window is built on the main
+/// thread after the old one is gone. A rebuild already in flight is
+/// refused: destroying the freshly built window mid-build would lose
+/// the new viewport.
+pub fn rebuild_main_window(
+    app: &tauri::AppHandle,
+    instance_url: &str,
+    navigate_to: &str,
+) -> Result<(), String> {
+    if rebuild_in_progress() {
+        return Err("viewport rebuild already in progress; try again".into());
+    }
+    REBUILD_IN_PROGRESS.store(true, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         eprintln!("persea-desktop: destroying the main window for the store switch");
         win.destroy().map_err(|e| e.to_string())?;
     }
-    REBUILD_IN_PROGRESS.store(true, Ordering::SeqCst);
     let app = app.clone();
     let url = instance_url.to_string();
+    let nav = navigate_to.to_string();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(250));
         let handle = app.clone();
@@ -1312,7 +1323,7 @@ pub fn rebuild_main_window(app: &tauri::AppHandle, instance_url: &str) -> Result
             match &built {
                 Ok(win) => {
                     eprintln!("persea-desktop: viewport rebuilt for {target}");
-                    if let Ok(parsed) = url::Url::parse(&target) {
+                    if let Ok(parsed) = url::Url::parse(&nav) {
                         let _ = win.navigate(parsed);
                     }
                 }

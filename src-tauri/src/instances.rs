@@ -1080,7 +1080,7 @@ pub fn cmd_instances_open(app: tauri::AppHandle, url: String) -> Result<(), Stri
     // viewport so each server keeps its own login cookie.
     if crate::windows::main_window_needs_rebuild(&url) {
         eprintln!("persea-desktop: switching instance store to {url}; rebuilding the viewport");
-        crate::windows::rebuild_main_window(&app, &url)
+        crate::windows::rebuild_main_window(&app, &url, &url)
     } else {
         navigate_main(&app, &url)
     }
@@ -1101,12 +1101,14 @@ pub fn cmd_instances_open_default(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn cmd_instances_open_setup(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let url = validate_instance_url(&url)?;
-    // Same per-instance store rule as open: the setup page runs in the
-    // instance's own webview store.
-    if crate::windows::main_window_needs_rebuild(&url) {
-        crate::windows::rebuild_main_window(&app, &url)?;
-    }
     let setup_url = format!("{url}/setup");
+    // Same per-instance store rule as open: the setup page runs in the
+    // instance's own webview store. The rebuild navigates to the setup
+    // page itself once the new window exists, so the command must not
+    // navigate before the rebuild finishes.
+    if crate::windows::main_window_needs_rebuild(&url) {
+        return crate::windows::rebuild_main_window(&app, &url, &setup_url);
+    }
     let parsed = url::Url::parse(&setup_url).map_err(|e| e.to_string())?;
     let win = app
         .get_webview_window(window_label(&url))
