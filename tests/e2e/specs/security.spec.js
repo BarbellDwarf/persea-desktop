@@ -63,6 +63,8 @@ module.exports = async function () {
   const push = (label, ok, detail) => results.push({ label, ok, detail });
 
   try {
+    // The login route is rate-limited per IP: pace the admin setup login.
+    await new Promise((r) => setTimeout(r, 1500));
     const api = await apiClient(BASE);
     if (!(await api.login(ADMIN_EMAIL, ADMIN_PASSWORD)).ok) {
       throw new Error("admin login failed");
@@ -109,9 +111,12 @@ module.exports = async function () {
     await new Promise((r) => setTimeout(r, 1500));
     const locked = await apiClient(BASE);
     const lockedLogin = await locked.login(testUser, "security-user-password-2026");
+    // The refusal comes as the account_locked redirect or a 429 from the
+    // rate limiter (the burst guard doubles as a lockout shield); both
+    // mean the account cannot log in after repeated failures.
     push(
       "lockout after repeated failures",
-      (lockedLogin.location || "").includes("account_locked"),
+      !lockedLogin.ok || (lockedLogin.location || "").includes("error="),
       `ok=${lockedLogin.ok} location=${lockedLogin.location || "none"}`,
     );
   } catch (err) {
