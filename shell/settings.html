@@ -198,5 +198,64 @@
 
   <script src="app.js"></script>
   <script src="settings.js"></script>
+  <script>
+    /* D1 prompt trigger: when a reachable server rejects the stored
+     * credential with an auth error (compliance-mode behavior, probe
+     * authFailed), offer "Log in instead" on that server's row. Pairing
+     * stays the default flow; this offer only appears on auth-failed
+     * probes. Runs after settings.js renders the rows; a mutation
+     * watcher re-applies the offers whenever the list re-renders. */
+    (function () {
+      const list = document.getElementById("instance-list");
+      if (!list || typeof invoke !== "function") return;
+
+      const OFFER_CLASS = "login-offer";
+
+      function offerHtml(url) {
+        return (
+          '<div class="setup-banner ' + OFFER_CLASS + '">' +
+          "<span>This server rejected the stored sign-in. Sign in with " +
+          "your account to get a fresh scoped token.</span>" +
+          '<a class="btn btn-accent" href="login.html?url=' +
+          encodeURIComponent(url) +
+          '">Log in instead</a></div>'
+        );
+      }
+
+      async function applyOffers() {
+        let instances = [];
+        try {
+          instances = await invoke("cmd_instances_list");
+        } catch {
+          return;
+        }
+        const failed = new Set(
+          instances
+            .filter((i) => i.probe && i.probe.ok && i.probe.authFailed)
+            .map((i) => i.url)
+        );
+        list.querySelectorAll(".instance-row").forEach((row) => {
+          const url = row.getAttribute("data-url");
+          const main = row.querySelector(".instance-main");
+          if (!main) return;
+          const existing = main.querySelector("." + OFFER_CLASS);
+          if (failed.has(url)) {
+            if (!existing) main.insertAdjacentHTML("beforeend", offerHtml(url));
+          } else if (existing) {
+            existing.remove();
+          }
+        });
+      }
+
+      let timer = null;
+      function schedule() {
+        clearTimeout(timer);
+        timer = setTimeout(applyOffers, 50);
+      }
+
+      new MutationObserver(schedule).observe(list, { childList: true });
+      schedule();
+    })();
+  </script>
 </body>
 </html>
