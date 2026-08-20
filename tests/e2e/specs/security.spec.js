@@ -21,7 +21,7 @@ async function apiClient(baseUrl) {
   const cookie = () => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
   const base = baseUrl.replace(/\/$/, "");
   return {
-    async login(username, password) {
+    async loginResult(username, password) {
       await absorb(await fetch(`${base}/`, { headers: { cookie: cookie() }, redirect: "manual" }));
       const res = await absorb(
         await fetch(`${base}/auth/login`, {
@@ -31,7 +31,15 @@ async function apiClient(baseUrl) {
           redirect: "manual",
         }),
       );
-      return { ok: [302, 303].includes(res.status), location: res.headers.get("location") };
+      const location = res.headers.get("location") || "";
+      return {
+        ok: [302, 303].includes(res.status),
+        detail: `HTTP ${res.status} ${location}`,
+        location,
+      };
+    },
+    async login(username, password) {
+      return this.loginResult(username, password);
     },
     async request(method, path, body) {
       return fetch(`${base}${path}`, {
@@ -51,14 +59,17 @@ async function apiClient(baseUrl) {
 // The login route is rate-limited per IP: retry the admin login a few
 // times so a burst limiter cannot trip the setup.
 async function adminLoginWithRetry() {
+  let last = "";
   for (let attempt = 0; attempt < 4; attempt += 1) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
     const api = await apiClient(BASE);
-    if ((await api.login(ADMIN_EMAIL, ADMIN_PASSWORD)).ok) {
+    const res = await api.loginResult(ADMIN_EMAIL, ADMIN_PASSWORD);
+    last = res.detail;
+    if (res.ok) {
       return api;
     }
   }
-  throw new Error("admin login failed (rate limited after retries)");
+  throw new Error(`admin login failed after retries: ${last}`);
 }
 
 module.exports = async function () {
@@ -109,14 +120,18 @@ module.exports = async function () {
     await api.request("POST", `/api/users/${encodeURIComponent(testUser)}/enable`);
 
     // 3. Brute-force lockout: repeated failures lock the account. The
-    //    login route is also rate-limited per IP, so pace the attempts
-    //    and verify the lockout verdict before the final login: a
-    //    swallowed attempt (rate-limited) must not leave the account
-    //    unlocked.
-    for (let i = 0; i < 6; i += 1) {
+    //    login route is also rate-limited per IP, so an attempt can be
+    //    swallowed by a 429 (which records no failure). Each attempt
+    //    must confirm the server processed it as a failed login (a
+    //    redirect to an error page) before counting it.
+    let recorded = 0;
+    for (let i = 0; i < 12 && recorded < 6; i += 1) {
       await new Promise((r) => setTimeout(r, 2500));
       const attempt = await apiClient(BASE);
-      await attempt.login(testUser, "wrong-password-2026");
+      const res = await attempt.loginResult(testUser, "wrong-password-2026");
+      if (res.ok && (res.location || "").includes("error=")) {
+        recorded += 1;
+      }
     }
     let lockedVerdict = false;
     for (let attemptNo = 0; attemptNo < 3 && !lockedVerdict; attemptNo += 1) {
@@ -133,8 +148,10 @@ module.exports = async function () {
     // mean the account cannot log in after repeated failures.
     push(
       "lockout after repeated failures",
-      lockedVerdict && (!lockedLogin.ok || (lockedLogin.location || "").includes("error=")),
-      `verdict=${lockedVerdict} ok=${lockedLogin.ok} location=${lockedLogin.location || "none"}`,
+      recorded >= 6 &&
+        lockedVerdict &&
+        (!lockedLogin.ok || (lockedLogin.location || "").includes("error=")),
+      `recorded=${recorded} verdict=${lockedVerdict} ok=${lockedLogin.ok} location=${lockedLogin.location || "none"}`,
     );
   } catch (err) {
     results.push({ label: "setup", ok: false, detail: err.message });

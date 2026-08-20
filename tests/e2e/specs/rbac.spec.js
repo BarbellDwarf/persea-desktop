@@ -63,6 +63,20 @@ async function apiClient(baseUrl) {
   };
 }
 
+// The login route is rate-limited per IP: retry a swallowed login (429)
+// a few times so the burst limiter cannot trip the cases.
+async function loginWithRetry(api, username, password) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
+    const res = await api.loginResult(username, password);
+    if (res.ok) return res;
+    // A 429 is a swallowed attempt: retry. Other failures (bad
+    // credentials, lockout) are final.
+    if (!(res.detail || "").includes("429")) return res;
+  }
+  return api.loginResult(username, password);
+}
+
 module.exports = async function () {
   if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
     console.log("rbac: skipped, PERSEA_E2E_LOGIN_EMAIL and PERSEA_E2E_LOGIN_PASSWORD are not set");
@@ -86,10 +100,11 @@ module.exports = async function () {
 
   const runCase = async (label, username, password, method, path, body, wanted) => {
     // The login route is rate-limited per IP (brute-force guard): pace
-    // the cases so the burst limiter cannot trip the suite.
+    // the cases and retry a swallowed login (429) so the burst limiter
+    // cannot trip the suite.
     await new Promise((r) => setTimeout(r, 1500));
     const api = await apiClient(BASE);
-    const login = await api.loginResult(username, password);
+    const login = await loginWithRetry(api, username, password);
     if (!login.ok) {
       results.push({ label, ok: false, detail: `login failed: ${login.detail}` });
       return;
@@ -203,14 +218,14 @@ module.exports = async function () {
     // alice (engineers member) sees the gated folder; bob (no groups) does not.
     await new Promise((r) => setTimeout(r, 1500));
     const aliceApi = await apiClient(BASE);
-    await aliceApi.login("alice", LDAP_PASSWORD);
+    await loginWithRetry(aliceApi, "alice", LDAP_PASSWORD);
     const aliceFolders = await (await aliceApi.request("GET", "/api/addressbook/folders")).json();
     const aliceSees = JSON.stringify(aliceFolders).includes(folderName);
     results.push({ label: "alice (ldap) sees gated folder", ok: aliceSees, detail: aliceSees ? "folder present" : "folder missing" });
 
     await new Promise((r) => setTimeout(r, 1500));
     const bobApi = await apiClient(BASE);
-    await bobApi.login("bob", "bob-ldap-password-2026");
+    await loginWithRetry(bobApi, "bob", "bob-ldap-password-2026");
     const bobFolders = await (await bobApi.request("GET", "/api/addressbook/folders")).json();
     const bobSees = JSON.stringify(bobFolders).includes(folderName);
     results.push({ label: "bob (ldap) blocked from gated folder", ok: !bobSees, detail: bobSees ? "folder visible" : "folder absent" });
