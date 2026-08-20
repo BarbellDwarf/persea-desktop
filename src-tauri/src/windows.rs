@@ -1141,7 +1141,6 @@ fn save_prefs(
 struct WindowManager {
     app: tauri::AppHandle,
     state: TabState,
-    policy: NavigationPolicy,
     /// Shell-side strip override (kiosk mode hides the strip).
     strip_enabled: bool,
 }
@@ -1168,13 +1167,13 @@ fn send(msg: Msg) -> Result<(), String> {
 }
 
 fn current_policy() -> NavigationPolicy {
-    manager().map(|m| m.policy.clone()).unwrap_or_else(|| {
-        let origins: Vec<String> = crate::instances::instances()
-            .iter()
-            .map(|i| i.url.clone())
-            .collect();
-        NavigationPolicy::new(origins, Vec::new())
-    })
+    // Derived from the live instance store on every navigation, so a
+    // server added at runtime is immediately navigable in the webview.
+    let origins: Vec<String> = crate::instances::instances()
+        .iter()
+        .map(|i| i.url.clone())
+        .collect();
+    NavigationPolicy::new(origins, Vec::new())
 }
 
 // ---------------------------------------------------------------------------
@@ -1455,11 +1454,6 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&config_dir)?;
     let prefs = load_prefs(&config_dir);
     let (default_mode, overrides) = prefs_to_state(&prefs);
-    let origins: Vec<String> = crate::instances::instances()
-        .iter()
-        .map(|i| i.url.clone())
-        .collect();
-    let policy = NavigationPolicy::new(origins.clone(), Vec::new());
     let mut state = TabState::new(default_mode);
     state.overrides = overrides;
 
@@ -1471,7 +1465,6 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let manager = WindowManager {
         app: app_handle.clone(),
         state,
-        policy,
         strip_enabled: true,
     };
     let _ = MANAGER.set(Mutex::new(manager));
