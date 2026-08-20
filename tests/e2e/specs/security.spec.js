@@ -48,6 +48,19 @@ async function apiClient(baseUrl) {
   };
 }
 
+// The login route is rate-limited per IP: retry the admin login a few
+// times so a burst limiter cannot trip the setup.
+async function adminLoginWithRetry() {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
+    const api = await apiClient(BASE);
+    if ((await api.login(ADMIN_EMAIL, ADMIN_PASSWORD)).ok) {
+      return api;
+    }
+  }
+  throw new Error("admin login failed (rate limited after retries)");
+}
+
 module.exports = async function () {
   if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
     console.log("security: skipped, PERSEA_E2E_LOGIN_EMAIL and PERSEA_E2E_LOGIN_PASSWORD are not set");
@@ -63,12 +76,7 @@ module.exports = async function () {
   const push = (label, ok, detail) => results.push({ label, ok, detail });
 
   try {
-    // The login route is rate-limited per IP: pace the admin setup login.
-    await new Promise((r) => setTimeout(r, 1500));
-    const api = await apiClient(BASE);
-    if (!(await api.login(ADMIN_EMAIL, ADMIN_PASSWORD)).ok) {
-      throw new Error("admin login failed");
-    }
+    const api = await adminLoginWithRetry();
 
     // A disposable user for the account-state cases.
     const created = await api.request("POST", "/api/users", {
@@ -123,8 +131,8 @@ module.exports = async function () {
     results.push({ label: "setup", ok: false, detail: err.message });
   } finally {
     try {
-      const api2 = await apiClient(BASE);
-      await api2.login(ADMIN_EMAIL, ADMIN_PASSWORD);
+      await new Promise((r) => setTimeout(r, 1500));
+      const api2 = await adminLoginWithRetry();
       await api2.request("DELETE", `/api/users/${encodeURIComponent(testUser)}`);
     } catch {
       // cleanup is best-effort
