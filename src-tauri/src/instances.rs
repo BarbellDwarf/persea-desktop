@@ -1076,7 +1076,14 @@ pub fn cmd_instances_open(app: tauri::AppHandle, url: String) -> Result<(), Stri
         s.save().map_err(|e| e.to_string())
     })
     .ok_or_else(unavailable_store)??;
-    navigate_main(&app, &url)
+    // A different instance needs its own webview store: rebuild the
+    // viewport so each server keeps its own login cookie.
+    if crate::windows::main_window_needs_rebuild(&url) {
+        eprintln!("persea-desktop: switching instance store to {url}; rebuilding the viewport");
+        crate::windows::rebuild_main_window(&app, &url)
+    } else {
+        navigate_main(&app, &url)
+    }
 }
 
 /// Open the default instance, or the last-used one. index.html calls this
@@ -1094,6 +1101,11 @@ pub fn cmd_instances_open_default(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn cmd_instances_open_setup(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let url = validate_instance_url(&url)?;
+    // Same per-instance store rule as open: the setup page runs in the
+    // instance's own webview store.
+    if crate::windows::main_window_needs_rebuild(&url) {
+        crate::windows::rebuild_main_window(&app, &url)?;
+    }
     let setup_url = format!("{url}/setup");
     let parsed = url::Url::parse(&setup_url).map_err(|e| e.to_string())?;
     let win = app
