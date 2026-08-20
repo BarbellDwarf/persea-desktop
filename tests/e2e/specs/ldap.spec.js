@@ -118,6 +118,20 @@ module.exports = async function () {
     }
     await screenshot(driver, "ldap-dashboard");
 
+    // Group auto-provisioning: alice is a member of the engineers group
+    // in LDAP; the server should have provisioned it locally.
+    const groupsRes = await fetch(`${base}/api/admin/groups`, {
+      headers: { cookie: cookieHeader() },
+    });
+    const groups = await groupsRes.json();
+    const hasEngineers = (Array.isArray(groups) ? groups : groups.groups || []).some(
+      (g) => g.name === "engineers" || g.name === "Engineers",
+    );
+    if (!hasEngineers) {
+      throw new Error(`engineers group not provisioned after the LDAP login; groups: ${JSON.stringify(groups).slice(0, 200)}`);
+    }
+    console.log("ldap: engineers group auto-provisioned");
+
     console.log("ldap: LDAP-backed login verified");
   } finally {
     await driver.quit();
