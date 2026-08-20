@@ -1,0 +1,45 @@
+# POSIX attributes for the LDAP test users (the server fixture seeds only
+# inetOrgPerson; NSS resolution needs posixAccount + a posixGroup for the
+# gid). Applied to the OpenLDAP harness after the base seed. Mirrors the
+# local audit setup.
+dn: uid=alice,ou=users,dc=example,dc=com
+changetype: modify
+add: objectClass
+objectClass: posixAccount
+-
+add: uidNumber
+uidNumber: 10001
+-
+add: gidNumber
+gidNumber: 10000
+-
+add: homeDirectory
+homeDirectory: /home/alice
+-
+add: loginShell
+loginShell: /bin/bash
+
+dn: uid=bob,ou=users,dc=example,dc=com
+changetype: modify
+add: objectClass
+objectClass: posixAccount
+-
+add: uidNumber
+uidNumber: 10002
+-
+add: gidNumber
+gidNumber: 10000
+-
+add: homeDirectory
+homeDirectory: /home/bob
+-
+add: loginShell
+loginShell: /bin/bash
+
+dn: cn=ldapusers,ou=groups,dc=example,dc=com
+objectClass: top
+objectClass: posixGroup
+cn: ldapusers
+gidNumber: 10000
+memberUid: alice
+memberUid: bob

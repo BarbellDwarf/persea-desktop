@@ -113,27 +113,34 @@ module.exports = async function () {
     );
     return;
   }
+  // One or more SSH targets. PERSEA_E2E_SSH_TARGETS (JSON array of
+  // { host, port, user, password, name }) overrides the single-target env.
+  let targets;
+  if (process.env.PERSEA_E2E_SSH_TARGETS) {
+    try {
+      targets = JSON.parse(process.env.PERSEA_E2E_SSH_TARGETS);
+    } catch (err) {
+      throw new Error(`PERSEA_E2E_SSH_TARGETS is not valid JSON: ${err.message}`);
+    }
+  } else {
+    targets = [
+      {
+        host: TARGET_HOST,
+        port: TARGET_PORT,
+        user: TARGET_USER,
+        password: TARGET_PASSWORD,
+        name: "default",
+      },
+    ];
+  }
+
   seedInstances([{ name: "Local", url: BASE, default: true }]);
   const driver = await newSession();
   const { By, until } = require("selenium-webdriver");
 
+  let failed = 0;
   try {
-    // Create the SSH entry through the API with a fresh name per run.
-    const api = await apiLogin(BASE, EMAIL, PASSWORD);
-    const entryName = `Audit SSH ${Date.now()}`;
-    const createRes = await api.post("/api/addressbook/folders/shared/Clients/entries", {
-      name: entryName,
-      type: "ssh",
-      hostname: TARGET_HOST,
-      port: TARGET_PORT,
-      username: TARGET_USER,
-      password: TARGET_PASSWORD,
-    });
-    if (!createRes.ok) {
-      throw new Error(`entry create failed: HTTP ${createRes.status} ${await createRes.text()}`);
-    }
-
-    // Webview login, then open the entry from the connections page.
+    // Webview login once, then open each target from the connections page.
     await ensureLoginPage(driver);
     await driver.findElement(By.id("username")).sendKeys(EMAIL);
     await driver.findElement(By.id("password")).sendKeys(PASSWORD);
@@ -141,28 +148,61 @@ module.exports = async function () {
     await waitForText(driver, "Connections");
     await screenshot(driver, "conn-before");
 
-    // Select the entry row (by its slug) and Connect.
-    const slug = entrySlug(entryName);
-    await driver.wait(until.elementLocated(By.css(`.entry-row[data-name="${slug}"]`)), 10000);
-    await driver.findElement(By.css(`.entry-row[data-name="${slug}"]`)).click();
-    await driver.wait(until.elementLocated(By.id("detail-connect")), 10000);
-    await driver.findElement(By.id("detail-connect")).click();
-
-    // The session client page flips #status to connected when the SSH
-    // session is live (the canvas render follows).
-    await driver.wait(until.elementLocated(By.css("#status.connected")), 60000);
-    await screenshot(driver, "connection-live");
-
-    console.log("connection: live SSH session verified");
-  } finally {
-    // Best-effort cleanup: drop the test entry so the server address
-    // book stays clean across runs.
-    try {
+    for (const target of targets) {
       const api = await apiLogin(BASE, EMAIL, PASSWORD);
-      await api.del("/api/addressbook/folders/shared/Clients/entries/" + entrySlug(entryName));
-    } catch {
-      // cleanup is best-effort
+      const entryName = `Audit SSH ${Date.now()} ${target.name}`;
+      const createRes = await api.post("/api/addressbook/folders/shared/Clients/entries", {
+        name: entryName,
+        type: "ssh",
+        hostname: target.host,
+        port: target.port,
+        username: target.user,
+        password: target.password,
+      });
+      if (!createRes.ok) {
+        failed += 1;
+        console.error(`connection target ${target.name}: entry create failed: HTTP ${createRes.status}`);
+        continue;
+      }
+
+      // Select the entry row (by its slug) and Connect.
+      const slug = entrySlug(entryName);
+      await driver.get(`${BASE}/connections.html`);
+      await waitForText(driver, "Connections");
+      await driver.wait(
+        until.elementLocated(By.css(`.entry-row[data-name="${slug}"]`)),
+        10000,
+      );
+      await driver.findElement(By.css(`.entry-row[data-name="${slug}"]`)).click();
+      await driver.wait(until.elementLocated(By.id("detail-connect")), 10000);
+      await driver.findElement(By.id("detail-connect")).click();
+
+      // The session client page flips #status to connected when the SSH
+      // session is live (the canvas render follows).
+      try {
+        await driver.wait(until.elementLocated(By.css("#status.connected")), 60000);
+        await screenshot(driver, `connection-live-${target.name}`);
+        console.log(`connection target ${target.name}: live SSH session verified`);
+      } catch (err) {
+        failed += 1;
+        console.error(`connection target ${target.name} FAIL: ${err.message}`);
+      }
+
+      // Best-effort cleanup: drop the test entry so the server address
+      // book stays clean across runs.
+      try {
+        await api.del(
+          `/api/addressbook/folders/shared/Clients/entries/${encodeURIComponent(slug)}`,
+        );
+      } catch {
+        // cleanup is best-effort
+      }
     }
+  } finally {
     await driver.quit();
+  }
+
+  if (failed > 0) {
+    throw new Error(`${failed} connection target(s) failed`);
   }
 };
