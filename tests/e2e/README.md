@@ -106,6 +106,16 @@ behavior against a target server and need local infra:
   `sshuser` / `ssh-test-password-2026`, published on port 2222. Override
   with `PERSEA_E2E_SSH_HOST` / `_PORT` / `_USER` / `_PASSWORD`. The server
   must have guacd configured.
+  For an LDAP-passthrough target (SSH auth via the OpenLDAP harness):
+  run an Ubuntu container with `libnss-ldapd` and `libpam-ldapd`, nslcd
+  pointed at `ldap://172.17.0.1:3389` (base `dc=example,dc=com`, bind
+  `cn=admin,dc=example,dc=com` / admin), nsswitch `passwd`/`group` set to
+  `files ldap`, and sshd with password auth. The LDAP users need
+  `posixAccount` attributes (`uidNumber`, `gidNumber`) and a `posixGroup`
+  for their gid; then run the connection spec with
+  `PERSEA_E2E_SSH_USER=alice PERSEA_E2E_SSH_PASSWORD=alice-ldap-password-2026`.
+  The terminal must show the LDAP user's prompt (the audit confirms auth
+  passed through LDAP, not local accounts).
 - `ldap.spec.js`: needs an enabled LDAP provider on the server (the
   running auth chain picks providers up at restart). The server repo
   provides the harness: `docker compose -f docker-compose.ldap.yml up -d
