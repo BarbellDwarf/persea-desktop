@@ -127,7 +127,9 @@ async function newSession() {
   const buildDeadline = Date.now() + 20000;
   for (;;) {
     try {
-      driver = builder.build();
+      // The build is async; without the await the rejection escapes the
+      // try/catch and the retry never happens.
+      driver = await builder.build();
       break;
     } catch (e) {
       if (Date.now() > buildDeadline) {
