@@ -17,6 +17,24 @@
 //! routing them through the same state-changing path is harmless and
 //! keeps the client uniform.
 //!
+//! Credential resolution (D3): every outgoing call carries exactly one
+//! Authorization credential, decided per request. A caller-supplied
+//! credential (the paired device token) always wins, so pairing stays
+//! the default identity. When the caller has none, the instance's
+//! stored scoped token fills in (`token_store::load_valid`,
+//! expiry-aware): the desktop then acts as the signed-in user, which is
+//! the only working identity on compliance-mode servers. The
+//! deliberately anonymous endpoints (the CSRF bootstrap and the
+//! device-code pairing handshake) never receive the fill-in, so the
+//! pairing flow behaves identically whether or not a scoped token is
+//! stored. A 401 answered to a call that went out with the scoped token
+//! is routed once into the D2 invalidation path
+//! (`bridge::scoped_token_rejected`): the keychain record clears and
+//! the shell offers re-login. There is no retry inside the failing
+//! request; the next caller-driven request re-resolves the cleared
+//! credential and goes out unauthenticated. Token material never
+//! appears in logs or errors.
+//!
 //! Consumption points:
 //! - device pairing: `post` for `/api/desktop/pair`, `get` for
 //!   `/api/desktop/pair/status`, `delete` (Bearer + CSRF) for
@@ -47,6 +65,10 @@ pub const CSRF_COOKIE: &str = "csrf_token";
 pub const CSRF_HEADER: &str = "x-csrf-token";
 /// Anonymous bootstrap endpoint: any anonymous GET sets the cookie.
 const BOOTSTRAP_PATH: &str = "/api/auth/status";
+/// Device-code pairing start; anonymous by server contract.
+const PAIR_PATH: &str = "/api/desktop/pair";
+/// Device-code pairing status path (the code travels as the query).
+const PAIR_STATUS_PATH: &str = "/api/desktop/pair/status";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 const BOOTSTRAP_ATTEMPTS: u32 = 3;
@@ -74,11 +96,48 @@ impl HttpResult {
     }
 }
 
+/// The Authorization credential one outgoing call carries, decided by
+/// [`ShellHttp::resolve_credential`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Credential {
+    /// The caller's own credential (the paired device token): attached
+    /// as-is, unchanged behavior.
+    Caller(String),
+    /// The instance's stored scoped token, filled in because the caller
+    /// had no credential: the desktop acts as the signed-in user.
+    Scoped(String),
+    /// Nothing to attach.
+    Anonymous,
+}
+
+impl Credential {
+    /// The header value for the credential; `None` when anonymous.
+    fn authorization_header(&self) -> Option<String> {
+        match self {
+            Credential::Caller(token) | Credential::Scoped(token) => {
+                Some(format!("Bearer {token}"))
+            }
+            Credential::Anonymous => None,
+        }
+    }
+
+    /// Whether the credential came from the scoped-token store (drives
+    /// the 401 routing).
+    fn is_scoped(&self) -> bool {
+        matches!(self, Credential::Scoped(_))
+    }
+}
+
 /// Shared shell HTTP client with per-instance CSRF state.
 #[derive(Debug)]
 pub struct ShellHttp {
     client: reqwest::Client,
     csrf: Mutex<HashMap<String, Option<String>>>,
+    /// Test seam: when set, replaces the keychain read behind
+    /// [`ShellHttp::stored_scoped_token`] (`Some(None)` models "no
+    /// valid record stored").
+    #[cfg(test)]
+    scoped_stub: Mutex<Option<Option<String>>>,
 }
 
 impl ShellHttp {
@@ -93,6 +152,8 @@ impl ShellHttp {
         Self {
             client,
             csrf: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            scoped_stub: Mutex::new(None),
         }
     }
 
@@ -100,8 +161,9 @@ impl ShellHttp {
         instance_url.trim_end_matches('/').to_string()
     }
 
-    /// GET request. GETs are CSRF-exempt; `bearer` is attached when the
-    /// caller has a paired token.
+    /// GET request. GETs are CSRF-exempt. `bearer` is the caller's own
+    /// credential (the paired device token); without one, the instance's
+    /// stored scoped token fills in when valid (see the module docs).
     pub async fn get(
         &self,
         instance_url: &str,
@@ -109,16 +171,19 @@ impl ShellHttp {
         bearer: Option<&str>,
     ) -> Result<HttpResult, String> {
         let url = format!("{}{}", self.base_url(instance_url), path);
+        let credential = self.resolve_credential(instance_url, path, bearer).await;
         let mut req = self.client.get(&url);
-        if let Some(token) = bearer {
-            req = req.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        if let Some(value) = credential.authorization_header() {
+            req = req.header(header::AUTHORIZATION, value);
         }
-        self.dispatch(req, instance_url).await
+        self.dispatch(req, instance_url, credential.is_scoped())
+            .await
     }
 
     /// Generic state-changing call with the CSRF double-submit contract:
     /// the `csrf_token` cookie and the `X-CSRF-Token` header are echoed
-    /// on every POST/PUT/DELETE/PATCH, plus the optional Bearer header.
+    /// on every POST/PUT/DELETE/PATCH, plus the resolved Authorization
+    /// credential (caller's own first, stored scoped token as fill-in).
     pub async fn send(
         &self,
         method: Method,
@@ -127,13 +192,14 @@ impl ShellHttp {
         bearer: Option<&str>,
         body: Option<Value>,
     ) -> Result<HttpResult, String> {
-        let token = self.ensure_csrf(instance_url).await?;
+        let csrf = self.ensure_csrf(instance_url).await?;
         let url = format!("{}{}", self.base_url(instance_url), path);
+        let credential = self.resolve_credential(instance_url, path, bearer).await;
         let mut req = self.client.request(method, &url);
-        if let Some(token) = bearer {
-            req = req.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        if let Some(value) = credential.authorization_header() {
+            req = req.header(header::AUTHORIZATION, value);
         }
-        if let Some(tok) = token {
+        if let Some(tok) = csrf {
             req = req
                 .header(header::COOKIE, format!("{CSRF_COOKIE}={tok}"))
                 .header(CSRF_HEADER, tok);
@@ -141,7 +207,8 @@ impl ShellHttp {
         if let Some(body) = body {
             req = req.json(&body);
         }
-        self.dispatch(req, instance_url).await
+        self.dispatch(req, instance_url, credential.is_scoped())
+            .await
     }
 
     pub async fn post(
@@ -174,6 +241,72 @@ impl ShellHttp {
     ) -> Result<HttpResult, String> {
         self.send(Method::DELETE, instance_url, path, bearer, None)
             .await
+    }
+
+    // -------------------------------------------------------------------
+    // Credential resolution and scoped-token 401 routing (D3)
+    // -------------------------------------------------------------------
+
+    /// Decides the Authorization credential of one outgoing call: the
+    /// caller's own credential first; otherwise the instance's stored
+    /// scoped token, unless the path is anonymous by contract.
+    async fn resolve_credential(
+        &self,
+        instance_url: &str,
+        path: &str,
+        caller: Option<&str>,
+    ) -> Credential {
+        match caller {
+            Some(token) => Credential::Caller(token.to_string()),
+            None if anonymous_path(path) => Credential::Anonymous,
+            None => {
+                let stored = self.stored_scoped_token(instance_url).await;
+                credential_precedence(None, stored)
+            }
+        }
+    }
+
+    /// The instance's stored scoped token, expiry-aware via
+    /// `token_store::load_valid`. `None` before the app handle exists
+    /// (early setup, tests) or when no unexpired record is stored; both
+    /// degrade to the unauthenticated call, exactly as before D3.
+    async fn stored_scoped_token(&self, instance_url: &str) -> Option<String> {
+        #[cfg(test)]
+        {
+            let stubbed = self
+                .scoped_stub
+                .lock()
+                .map(|slot| (*slot).clone())
+                .unwrap_or_default();
+            if let Some(token) = stubbed {
+                return token;
+            }
+        }
+        let handle = crate::bridge::app_handle()?.clone();
+        let record = crate::token_store::load_valid(handle, instance_url)
+            .await
+            .ok()??;
+        Some(record.token)
+    }
+
+    /// Single-shot 401 handling for a call that went out with the
+    /// scoped token: hands the failure to the D2 invalidation routing
+    /// once. No retry happens here; the next caller-driven request
+    /// re-resolves the cleared credential.
+    async fn route_scoped_rejection(&self, instance_url: &str, status: StatusCode, body: &Value) {
+        let Some(handle) = crate::bridge::app_handle() else {
+            return;
+        };
+        let raw = scoped_rejection_raw_error(status, body);
+        crate::bridge::scoped_token_rejected(handle, instance_url, &raw).await;
+    }
+
+    /// Installs the test override for [`ShellHttp::stored_scoped_token`].
+    #[cfg(test)]
+    fn stub_scoped_token(&self, token: Option<String>) {
+        if let Ok(mut slot) = self.scoped_stub.lock() {
+            *slot = Some(token);
+        }
     }
 
     /// CSRF bootstrap: one anonymous GET per instance, retried up to
@@ -227,6 +360,7 @@ impl ShellHttp {
         &self,
         req: reqwest::RequestBuilder,
         instance_url: &str,
+        used_scoped: bool,
     ) -> Result<HttpResult, String> {
         let resp = req
             .send()
@@ -243,6 +377,10 @@ impl ShellHttp {
             Ok(value) => value,
             Err(_) => Value::Null,
         };
+        if routes_scoped_rejection(used_scoped, status) {
+            self.route_scoped_rejection(instance_url, status, &body)
+                .await;
+        }
         Ok(HttpResult { status, body })
     }
 
@@ -293,6 +431,51 @@ fn extract_cookie(resp: &reqwest::Response, name: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Pure precedence decision behind [`ShellHttp::resolve_credential`]
+/// (test seam): the caller's own credential wins; the stored scoped
+/// token only fills a missing one; neither means the call goes out
+/// unauthenticated.
+fn credential_precedence(caller: Option<&str>, stored: Option<String>) -> Credential {
+    match caller {
+        Some(token) => Credential::Caller(token.to_string()),
+        None => match stored {
+            Some(token) => Credential::Scoped(token),
+            None => Credential::Anonymous,
+        },
+    }
+}
+
+/// Paths that stay anonymous even when a scoped token is stored: the
+/// CSRF bootstrap and the device-code pairing handshake carry no
+/// credential by server contract, so pairing works identically with or
+/// without a desktop sign-in. The query string is ignored (the pairing
+/// status poll carries its code there).
+fn anonymous_path(path: &str) -> bool {
+    let bare = path.split('?').next().unwrap_or(path);
+    bare == BOOTSTRAP_PATH || bare == PAIR_PATH || bare == PAIR_STATUS_PATH
+}
+
+/// Whether a finished request routes into the D2 invalidation path:
+/// only a 401 answered to a call that went out with the scoped token.
+fn routes_scoped_rejection(used_scoped: bool, status: StatusCode) -> bool {
+    used_scoped && status == StatusCode::UNAUTHORIZED
+}
+
+/// The raw failure string handed to the D2 routing: the status plus the
+/// server's `error` field, so the classifier sees its 401 marker even
+/// on a bodyless answer. The string never contains credential material.
+fn scoped_rejection_raw_error(status: StatusCode, body: &Value) -> String {
+    let detail = body
+        .get("error")
+        .and_then(|e| e.as_str())
+        .unwrap_or_default();
+    if detail.is_empty() {
+        format!("HTTP {}", status.as_u16())
+    } else {
+        format!("HTTP {}: {detail}", status.as_u16())
+    }
 }
 
 #[cfg(test)]
@@ -701,5 +884,176 @@ mod tests {
             http.bootstrap(&server.url()).await.expect_err("must fail")
         });
         assert!(err.contains("server set no csrf cookie"));
+    }
+
+    // -------------------------------------------------------------------
+    // Credential resolution (D3)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn precedence_pins_pairing_first_and_scoped_fallback() {
+        // Pairing credential present: it wins even when a scoped token
+        // is stored (pairing stays the default identity).
+        assert_eq!(
+            credential_precedence(Some("dev-tkn"), Some("rgu-scoped".to_string())),
+            Credential::Caller("dev-tkn".to_string())
+        );
+        assert_eq!(
+            credential_precedence(Some("dev-tkn"), None),
+            Credential::Caller("dev-tkn".to_string())
+        );
+        // No pairing credential: the scoped token fills in.
+        assert_eq!(
+            credential_precedence(None, Some("rgu-scoped".to_string())),
+            Credential::Scoped("rgu-scoped".to_string())
+        );
+        // Neither: unauthenticated, exactly as before D3.
+        assert_eq!(credential_precedence(None, None), Credential::Anonymous);
+    }
+
+    #[test]
+    fn anonymous_endpoints_are_exempt_from_the_fill_in() {
+        assert!(anonymous_path(BOOTSTRAP_PATH));
+        assert!(anonymous_path(PAIR_PATH));
+        assert!(anonymous_path("/api/desktop/pair/status?code=ABCD2345"));
+        assert!(!anonymous_path("/api/sessions"));
+        assert!(!anonymous_path("/api/me/tokens/7"));
+    }
+
+    #[test]
+    fn missing_caller_credential_carries_the_stored_scoped_token() {
+        let server = MockServer::start(MockScript::new(vec![ok_json("{\"sessions\":[]}")]));
+        let http = ShellHttp::new();
+        http.stub_scoped_token(Some("rgu-scoped-value".to_string()));
+        tauri::async_runtime::block_on(async {
+            let result = http
+                .get(&server.url(), "/api/sessions", None)
+                .await
+                .expect("get");
+            assert!(result.is_success());
+        });
+        let requests = server.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].headers.get("authorization").map(|s| s.as_str()),
+            Some("Bearer rgu-scoped-value")
+        );
+    }
+
+    #[test]
+    fn caller_credential_beats_the_stored_scoped_token_on_the_wire() {
+        let server = MockServer::start(MockScript::new(vec![ok_json("{\"sessions\":[]}")]));
+        let http = ShellHttp::new();
+        http.stub_scoped_token(Some("rgu-scoped-value".to_string()));
+        tauri::async_runtime::block_on(async {
+            let result = http
+                .get(&server.url(), "/api/sessions", Some("dev-tkn"))
+                .await
+                .expect("get");
+            assert!(result.is_success());
+        });
+        let requests = server.requests();
+        assert_eq!(
+            requests[0].headers.get("authorization").map(|s| s.as_str()),
+            Some("Bearer dev-tkn"),
+            "the paired credential must stay the default when present"
+        );
+    }
+
+    #[test]
+    fn no_stored_token_leaves_the_call_unauthenticated() {
+        let server = MockServer::start(MockScript::new(vec![ok_json("{}")]));
+        let http = ShellHttp::new();
+        http.stub_scoped_token(None);
+        tauri::async_runtime::block_on(async {
+            let result = http
+                .get(&server.url(), "/api/sessions", None)
+                .await
+                .expect("get");
+            assert!(result.is_success());
+        });
+        let requests = server.requests();
+        assert_eq!(
+            requests[0].headers.get("authorization"),
+            None,
+            "without a stored record the call must look exactly as before D3"
+        );
+    }
+
+    #[test]
+    fn state_changing_call_carries_the_scoped_fill_in_with_csrf() {
+        let server = MockServer::start(MockScript::new(vec![
+            csrf_response("csrf-scoped-1"),
+            ok_json("{\"ok\":true}"),
+        ]));
+        let http = ShellHttp::new();
+        http.stub_scoped_token(Some("rgu-scoped-post".to_string()));
+        tauri::async_runtime::block_on(async {
+            let result = http
+                .post(&server.url(), "/api/sessions", None, Some(json!({"id": 1})))
+                .await
+                .expect("post");
+            assert!(result.is_success());
+        });
+        let requests = server.requests();
+        let posted = &requests[1];
+        assert_eq!(
+            posted.headers.get("authorization").map(|s| s.as_str()),
+            Some("Bearer rgu-scoped-post")
+        );
+        assert_eq!(
+            posted.headers.get("x-csrf-token").map(|s| s.as_str()),
+            Some("csrf-scoped-1")
+        );
+    }
+
+    #[test]
+    fn unauthorized_scoped_call_is_answered_once_without_retry() {
+        let server = MockServer::start(MockScript::new(vec![MockResponse {
+            status: 401,
+            reason: "Unauthorized",
+            headers: vec![("Content-Type".to_string(), "application/json".to_string())],
+            body: "{\"error\":\"token expired\"}".to_string(),
+        }]));
+        let http = ShellHttp::new();
+        http.stub_scoped_token(Some("rgu-revoked".to_string()));
+        let result = tauri::async_runtime::block_on(async {
+            http.get(&server.url(), "/api/sessions", None)
+                .await
+                .expect("get")
+        });
+        assert_eq!(result.status, StatusCode::UNAUTHORIZED);
+        // Exactly one request went out: the rejection never retries.
+        // The D2 routing cleared the stored record, so the next call
+        // resolves to unauthenticated.
+        assert_eq!(server.requests().len(), 1);
+    }
+
+    #[test]
+    fn only_scoped_token_401s_route_into_invalidation() {
+        assert!(routes_scoped_rejection(true, StatusCode::UNAUTHORIZED));
+        // A 401 against the caller's own credential belongs to the
+        // poller's signed-out flow, never to the token invalidation.
+        assert!(!routes_scoped_rejection(false, StatusCode::UNAUTHORIZED));
+        assert!(!routes_scoped_rejection(true, StatusCode::FORBIDDEN));
+        assert!(!routes_scoped_rejection(
+            true,
+            StatusCode::INTERNAL_SERVER_ERROR
+        ));
+    }
+
+    #[test]
+    fn scoped_rejection_error_feeds_the_d2_classifier() {
+        use crate::token_store::{classify_auth_error, AuthFailure};
+        let raw = scoped_rejection_raw_error(
+            StatusCode::UNAUTHORIZED,
+            &json!({"error": "token expired"}),
+        );
+        assert_eq!(raw, "HTTP 401: token expired");
+        assert_eq!(classify_auth_error(&raw), AuthFailure::TokenInvalidated);
+        // A bodyless 401 still classifies through the status marker.
+        let bare = scoped_rejection_raw_error(StatusCode::UNAUTHORIZED, &Value::Null);
+        assert_eq!(bare, "HTTP 401");
+        assert_eq!(classify_auth_error(&bare), AuthFailure::TokenInvalidated);
     }
 }
