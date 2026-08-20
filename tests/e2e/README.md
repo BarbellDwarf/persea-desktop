@@ -93,6 +93,27 @@ Specs marked "CI" run only in the full matrix (they need guacd on 4822 or
 engine-specific plumbing); locally they degrade to render checks. Known
 skips are tracked here; a skip must name the reason, never delete the spec.
 
+## Full-check specs (local infra)
+
+The full-check specs (login, navigation, connection, ldap) verify real
+behavior against a target server and need local infra:
+
+- `login.spec.js`, `navigation.spec.js`: need `PERSEA_E2E_LOGIN_EMAIL` and
+  `PERSEA_E2E_LOGIN_PASSWORD` (real credentials on the target server);
+  they skip without them.
+- `connection.spec.js`: needs an SSH target reachable from the server.
+  Default target: a container on the docker bridge (`172.17.0.1`), user
+  `sshuser` / `ssh-test-password-2026`, published on port 2222. Override
+  with `PERSEA_E2E_SSH_HOST` / `_PORT` / `_USER` / `_PASSWORD`. The server
+  must have guacd configured.
+- `ldap.spec.js`: needs an enabled LDAP provider on the server (the
+  running auth chain picks providers up at restart). The server repo
+  provides the harness: `docker compose -f docker-compose.ldap.yml up -d
+  --wait` (port 3389) plus the seed in `tests/fixtures/ldap-seed.ldif`
+  (alice / alice-ldap-password-2026). Configure the provider through the
+  admin auth page or `POST /api/auth/providers`, then restart the server.
+  The spec skips with a named reason when no provider is enabled.
+
 ## Screenshots
 
 `docs/screenshots/` holds the canonical desktop set (captured by
