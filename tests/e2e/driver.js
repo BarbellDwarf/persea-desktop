@@ -68,33 +68,31 @@ function startDriver() {
 // Restart the app on macOS so the fresh process reads the store the spec
 // just seeded. The embedded WebDriver server survives session deletion,
 // so a stale instance would keep its old in-memory store otherwise.
-function restartApp() {
-  if (driverProcess) {
-    try {
-      driverProcess.kill();
-    } catch (_) {
-      // already gone
-    }
-    driverProcess = null;
-  }
-  const fs = require("fs");
-  const log = fs.openSync("tauri-driver.log", "w");
-  driverProcess = spawn(APP_PATH, [], {
-    env: { ...process.env, TAURI_WEBDRIVER_PORT: String(DRIVER_PORT) },
-    stdio: ["ignore", log, log],
-  });
+function waitForPort(acceptDeadlineMs, expect) {
+  // Polls the driver port until it accepts (`"open"`) or refuses
+  // (`"closed"`) connections. The closed wait matters after a kill: the
+  // dying app's socket can still accept for a moment, and a session
+  // built against it dies with ECONNREFUSED mid-spec.
   return new Promise((resolve, reject) => {
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + acceptDeadlineMs;
     const probe = () => {
       const net = require("net");
       const socket = net.connect(DRIVER_PORT, "127.0.0.1");
       socket.on("connect", () => {
         socket.destroy();
-        resolve();
+        if (expect === "open") {
+          resolve();
+        } else if (Date.now() > deadline) {
+          resolve();
+        } else {
+          setTimeout(probe, 250);
+        }
       });
       socket.on("error", () => {
         socket.destroy();
-        if (Date.now() > deadline) {
+        if (expect === "closed") {
+          resolve();
+        } else if (Date.now() > deadline) {
           const fs = require("fs");
           const tail = fs.existsSync("tauri-driver.log")
             ? fs.readFileSync("tauri-driver.log", "utf8").split("\n").slice(-10).join("\n")
@@ -107,6 +105,27 @@ function restartApp() {
     };
     probe();
   });
+}
+
+async function restartApp() {
+  if (driverProcess) {
+    try {
+      driverProcess.kill();
+    } catch (_) {
+      // already gone
+    }
+    driverProcess = null;
+    // Wait for the dying app to release the driver port before spawning
+    // the replacement, so the new session cannot attach to a corpse.
+    await waitForPort(10000, "closed");
+  }
+  const fs = require("fs");
+  const log = fs.openSync("tauri-driver.log", "w");
+  driverProcess = spawn(APP_PATH, [], {
+    env: { ...process.env, TAURI_WEBDRIVER_PORT: String(DRIVER_PORT) },
+    stdio: ["ignore", log, log],
+  });
+  await waitForPort(20000, "open");
 }
 
 async function newSession() {
