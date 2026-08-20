@@ -196,6 +196,14 @@ pub fn desktop_bridge_available() -> bool {
     BRIDGE_AVAILABLE.get().copied().unwrap_or(false)
 }
 
+/// The stored app handle, for shell modules outside a command or setup
+/// context that need one (the HTTP client's scoped-token resolution and
+/// its 401 routing). `None` until [`register`] runs; callers degrade to
+/// the pre-D3 behavior on `None`.
+pub(crate) fn app_handle() -> Option<&'static AppHandle> {
+    APP_HANDLE.get()
+}
+
 /// The document-start script that installs the page-side listener plumbing.
 ///
 /// It defines `window.perseaShell` (`on(name, handler)` for shell-to-page
