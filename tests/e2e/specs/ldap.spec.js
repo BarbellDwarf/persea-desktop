@@ -26,7 +26,7 @@ module.exports = async function () {
   }
   seedInstances([{ name: "Local", url: BASE, default: true }]);
   const driver = await newSession();
-  const { By } = require("selenium-webdriver");
+  const { By, until } = require("selenium-webdriver");
 
   try {
     // Log in as admin in the webview, then check the provider list via
@@ -71,8 +71,9 @@ module.exports = async function () {
     const providersRes = await fetch(`${base}/api/auth/providers`, {
       headers: { cookie: cookieHeader() },
     });
-    const providers = await providersRes.json();
-    const ldapProvider = providers.find((p) => p.provider_type === "ldap" && p.enabled);
+    const payload = await providersRes.json();
+    const providers = Array.isArray(payload) ? payload : payload.providers || [];
+    const ldapProvider = providers.find((p) => p.type === "ldap" && p.enabled);
     if (!ldapProvider) {
       console.log(
         "ldap: skipped, no enabled LDAP provider on the server (configure it via the admin auth page; the running chain needs a restart)",
@@ -81,8 +82,10 @@ module.exports = async function () {
     }
     console.log(`ldap: provider '${ldapProvider.name}' present`);
 
-    // Log out and log in with the LDAP account.
-    await driver.get(`${BASE}/auth/logout`);
+    // Log out through the header button (POST with CSRF), then log in
+    // with the LDAP account.
+    await driver.wait(until.elementLocated(By.id("logout-btn")), 10000);
+    await driver.findElement(By.id("logout-btn")).click();
     await waitForText(driver, "Sign in");
     await driver.findElement(By.id("username")).sendKeys(LDAP_USERNAME);
     await driver.findElement(By.id("password")).sendKeys(LDAP_PASSWORD);

@@ -12,6 +12,20 @@ async function waitForText(driver, text, timeoutMs = 20000) {
   await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), '${text}')]`)), timeoutMs);
 }
 
+// The webview cookie store persists across app instances, so a previous
+// spec's login can land here on the dashboard. Log out through the
+// header button (POST with CSRF) and wait for the login page.
+async function ensureLoginPage(driver) {
+  const { until, By } = require("selenium-webdriver");
+  try {
+    await waitForText(driver, "Sign in", 8000);
+  } catch {
+    await driver.wait(until.elementLocated(By.id("logout-btn")), 10000);
+    await driver.findElement(By.id("logout-btn")).click();
+    await waitForText(driver, "Sign in", 15000);
+  }
+}
+
 module.exports = async function () {
   if (!EMAIL || !PASSWORD) {
     console.log(
@@ -25,7 +39,7 @@ module.exports = async function () {
 
   try {
     // Admin login, then the dashboard.
-    await waitForText(driver, "Sign in");
+    await ensureLoginPage(driver);
     await driver.findElement(By.id("username")).sendKeys(EMAIL);
     await driver.findElement(By.id("password")).sendKeys(PASSWORD);
     await driver.findElement(By.id("login-form")).submit();

@@ -20,8 +20,26 @@ async function waitForText(driver, text, timeoutMs = 20000) {
   await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), '${text}')]`)), timeoutMs);
 }
 
+// The webview cookie store persists across app instances, so a previous
+// spec's login can land here on the dashboard. Log out through the
+// header button (POST with CSRF) and wait for the login page.
+async function ensureLoginPage(driver) {
+  const { until, By } = require("selenium-webdriver");
+  try {
+    await waitForText(driver, "Sign in", 8000);
+  } catch {
+    await driver.wait(until.elementLocated(By.id("logout-btn")), 10000);
+    await driver.findElement(By.id("logout-btn")).click();
+    await waitForText(driver, "Sign in", 15000);
+  }
+}
+
 // Log in over the API and return { jar, get, post } with the session
 // cookie absorbed. node 18 fetch has no cookie jar, so the jar is manual.
+function entrySlug(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
 async function apiLogin(baseUrl, email, password) {
   const jar = {};
   const cookieHeader = () =>
@@ -68,8 +86,20 @@ async function apiLogin(baseUrl, email, password) {
       return absorb(
         await fetch(`${base}${path}`, {
           method: "POST",
-          headers: { "content-type": "application/json", cookie: cookieHeader() },
+          headers: {
+            "content-type": "application/json",
+            cookie: cookieHeader(),
+            "x-csrf-token": jar.csrf_token || "",
+          },
           body: JSON.stringify(body),
+        }),
+      );
+    },
+    async del(path) {
+      return absorb(
+        await fetch(`${base}${path}`, {
+          method: "DELETE",
+          headers: { cookie: cookieHeader(), "x-csrf-token": jar.csrf_token || "" },
         }),
       );
     },
@@ -93,7 +123,7 @@ module.exports = async function () {
     const entryName = `Audit SSH ${Date.now()}`;
     const createRes = await api.post("/api/addressbook/folders/shared/Clients/entries", {
       name: entryName,
-      session_type: "ssh",
+      type: "ssh",
       hostname: TARGET_HOST,
       port: TARGET_PORT,
       username: TARGET_USER,
@@ -104,19 +134,17 @@ module.exports = async function () {
     }
 
     // Webview login, then open the entry from the connections page.
-    await waitForText(driver, "Sign in");
+    await ensureLoginPage(driver);
     await driver.findElement(By.id("username")).sendKeys(EMAIL);
     await driver.findElement(By.id("password")).sendKeys(PASSWORD);
     await driver.findElement(By.id("login-form")).submit();
     await waitForText(driver, "Connections");
     await screenshot(driver, "conn-before");
 
-    // Select the entry row (matched by its display name) and Connect.
-    await driver.wait(
-      until.elementLocated(By.xpath(`//*[contains(text(), '${entryName}')]`)),
-      10000,
-    );
-    await driver.findElement(By.xpath(`//*[contains(text(), '${entryName}')]`)).click();
+    // Select the entry row (by its slug) and Connect.
+    const slug = entrySlug(entryName);
+    await driver.wait(until.elementLocated(By.css(`.entry-row[data-name="${slug}"]`)), 10000);
+    await driver.findElement(By.css(`.entry-row[data-name="${slug}"]`)).click();
     await driver.wait(until.elementLocated(By.id("detail-connect")), 10000);
     await driver.findElement(By.id("detail-connect")).click();
 
@@ -127,6 +155,14 @@ module.exports = async function () {
 
     console.log("connection: live SSH session verified");
   } finally {
+    // Best-effort cleanup: drop the test entry so the server address
+    // book stays clean across runs.
+    try {
+      const api = await apiLogin(BASE, EMAIL, PASSWORD);
+      await api.del("/api/addressbook/folders/shared/Clients/entries/" + entrySlug(entryName));
+    } catch {
+      // cleanup is best-effort
+    }
     await driver.quit();
   }
 };
