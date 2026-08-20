@@ -219,6 +219,7 @@ module.exports = async function () {
   } finally {
     // Restore and clean up as admin.
     try {
+      await new Promise((r) => setTimeout(r, 1500));
       const api2 = await apiClient(BASE);
       await api2.login(ADMIN_EMAIL, ADMIN_PASSWORD);
       for (const u of [aliceEmail, bobEmail]) {
