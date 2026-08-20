@@ -1,11 +1,14 @@
-/* Persea Desktop login page (D0).
+/* Persea Desktop login page (D0 page, D1 live command).
  *
  * The scoped-token sign-in entry point: the shell shows this page when
- * the server requires a fresh sign-in, and it calls cmd_token_acquire
- * with the server URL, username and password. The command is a seam
- * today (the server endpoint lands with persea#227), so the page renders
- * the stub error; once the endpoint exists it renders the acquired
- * token's TTL. Runs after app.js (invoke, escapeHtml).
+ * the server rejects the stored credential (compliance mode) or when
+ * the user picks "Log in instead" in Settings. It calls
+ * cmd_token_acquire with the server URL, username and password; the
+ * command performs the desktop handshake (csrf bootstrap, form post,
+ * token-page parse) and stores the scoped token in the OS keychain. On
+ * success the page reports the token's remaining validity; classified
+ * failures (wrong credentials, locked account, MFA required) render as
+ * errors. Runs after app.js (invoke, escapeHtml).
  *
  * Instance selection: ?url=<instance url> opens the page for a specific
  * instance (the compliance-mode trigger links this way); without the
