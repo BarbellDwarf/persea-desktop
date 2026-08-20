@@ -1,5 +1,12 @@
 //! Scoped-token store for the desktop sign-in flow (D0 plumbing, D1
-//! acquisition).
+//! acquisition, D2 expiry awareness).
+//!
+//! Expiry awareness (D2): reads meant for presentation to a server go
+//! through [`load_valid`], which never hands out a record past
+//! [`TOKEN_TTL_SECS`]; [`freshness`] classifies how far a stored token
+//! is from its expiry so the shell can surface an interactive renew
+//! sign-in (there is no silent refresh: the app never stores the
+//! password).
 //!
 //! The scoped token is the credential the desktop shell uses to act on a
 //! server with the identity of the signed-in user. It is stored as a JSON
@@ -101,6 +108,56 @@ pub async fn get_token(
 /// Deletes the stored record for `instance_url`; `false` when none existed.
 pub async fn delete_token(app: tauri::AppHandle, instance_url: &str) -> Result<bool, String> {
     keyring::keyring_delete(SERVICE_NAME.to_string(), keyring_user(instance_url), app).await
+}
+
+/// How long before the TTL a stored token counts as "expiring": inside
+/// this window the shell surfaces its renew offer (Settings banner).
+pub const TOKEN_RENEWAL_WINDOW_SECS: u64 = 30 * 60;
+
+/// How far a stored token is from its expiry, as the renewal surfacing
+/// reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenFreshness {
+    /// Valid with more than [`TOKEN_RENEWAL_WINDOW_SECS`] left.
+    Fresh,
+    /// Valid but inside the renewal window; the shell offers an
+    /// interactive renew sign-in (no silent refresh exists: the app
+    /// never stores the password).
+    Expiring,
+    /// Past [`TOKEN_TTL_SECS`]; the server rejects it.
+    Expired,
+}
+
+/// [`TokenFreshness`] of `record` at `now_secs`. Clock skew (now before
+/// `issued_at`) counts as fresh, matching [`is_expired`].
+pub fn freshness(record: &TokenRecord, now_secs: u64) -> TokenFreshness {
+    if is_expired(record, now_secs) {
+        TokenFreshness::Expired
+    } else if now_secs.saturating_sub(record.issued_at)
+        >= TOKEN_TTL_SECS - TOKEN_RENEWAL_WINDOW_SECS
+    {
+        TokenFreshness::Expiring
+    } else {
+        TokenFreshness::Fresh
+    }
+}
+
+/// The expiry-aware read decision, pure for tests: a record only comes
+/// back when it exists and is still inside its TTL.
+fn unexpired(record: Option<TokenRecord>, now_secs: u64) -> Option<TokenRecord> {
+    record.filter(|r| !is_expired(r, now_secs))
+}
+
+/// Reads the stored record for `instance_url`, but never hands out an
+/// expired one: `Ok(None)` when nothing is stored or the record is past
+/// [`TOKEN_TTL_SECS`]. Callers that present the token to a server must
+/// use this instead of [`get_token`].
+pub async fn load_valid(
+    app: tauri::AppHandle,
+    instance_url: &str,
+) -> Result<Option<TokenRecord>, String> {
+    let record = get_token(app, instance_url).await?;
+    Ok(unexpired(record, now_secs()))
 }
 
 /// Class of a failed token-acquisition attempt, so the shell can pick the
@@ -467,6 +524,38 @@ mod tests {
     fn token_never_expires_before_issue_time() {
         // Clock skew: now before issued_at must not count as expired.
         assert!(!is_expired(&record("t", 2_000), 1_000));
+    }
+
+    #[test]
+    fn freshness_marks_the_renewal_window() {
+        let rec = record("t", 1_000);
+        let window_start = 1_000 + TOKEN_TTL_SECS - TOKEN_RENEWAL_WINDOW_SECS;
+        assert_eq!(freshness(&rec, 1_000), TokenFreshness::Fresh);
+        assert_eq!(freshness(&rec, window_start - 1), TokenFreshness::Fresh);
+        // The window start itself is already "expiring".
+        assert_eq!(freshness(&rec, window_start), TokenFreshness::Expiring);
+        assert_eq!(
+            freshness(&rec, 1_000 + TOKEN_TTL_SECS - 1),
+            TokenFreshness::Expiring
+        );
+        // The TTL boundary flips straight to expired.
+        assert_eq!(
+            freshness(&rec, 1_000 + TOKEN_TTL_SECS),
+            TokenFreshness::Expired
+        );
+    }
+
+    #[test]
+    fn freshness_treats_clock_skew_as_fresh() {
+        assert_eq!(freshness(&record("t", 2_000), 1_000), TokenFreshness::Fresh);
+    }
+
+    #[test]
+    fn unexpired_drops_missing_and_expired_records() {
+        let rec = record("t", 1_000);
+        assert_eq!(unexpired(None, 2_000), None);
+        assert_eq!(unexpired(Some(rec.clone()), 1_000 + TOKEN_TTL_SECS), None);
+        assert!(unexpired(Some(rec), 1_000 + TOKEN_TTL_SECS - 1).is_some());
     }
 
     #[test]
