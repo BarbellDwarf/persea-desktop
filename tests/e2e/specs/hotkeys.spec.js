@@ -19,8 +19,11 @@ module.exports = async function () {
 
   try {
     await driver.get(`${SHELL_ORIGIN}/tabstrip.html`);
-    await driver.wait(until.elementLocated(By.id("strip")), 10000);
-    await driver.wait(until.elementLocated(By.id("tabs")), 10000);
+    // The strip element is static HTML, so a timeout here means the
+    // first navigation itself was slow (cold app start on Windows);
+    // allow a generous window before declaring the page missing.
+    await driver.wait(until.elementLocated(By.id("strip")), 30000);
+    await driver.wait(until.elementLocated(By.id("tabs")), 30000);
 
     // No instances, no sessions: the tab list is empty and the strip
     // renders no tabs. The strip window itself is hidden by the dock
