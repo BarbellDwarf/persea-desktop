@@ -109,14 +109,23 @@ module.exports = async function () {
     await api.request("POST", `/api/users/${encodeURIComponent(testUser)}/enable`);
 
     // 3. Brute-force lockout: repeated failures lock the account. The
-    //    login route is also rate-limited per IP, so pace the attempts:
-    //    the lockout must be the verdict, not the burst limiter.
+    //    login route is also rate-limited per IP, so pace the attempts
+    //    and verify the lockout verdict before the final login: a
+    //    swallowed attempt (rate-limited) must not leave the account
+    //    unlocked.
     for (let i = 0; i < 6; i += 1) {
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 2500));
       const attempt = await apiClient(BASE);
       await attempt.login(testUser, "wrong-password-2026");
     }
-    await new Promise((r) => setTimeout(r, 1500));
+    let lockedVerdict = false;
+    for (let attemptNo = 0; attemptNo < 3 && !lockedVerdict; attemptNo += 1) {
+      await new Promise((r) => setTimeout(r, 2500));
+      const probe = await apiClient(BASE);
+      const probeLogin = await probe.login(testUser, "wrong-password-2026");
+      lockedVerdict = (probeLogin.location || "").includes("account_locked");
+    }
+    await new Promise((r) => setTimeout(r, 2500));
     const locked = await apiClient(BASE);
     const lockedLogin = await locked.login(testUser, "security-user-password-2026");
     // The refusal comes as the account_locked redirect or a 429 from the
@@ -124,8 +133,8 @@ module.exports = async function () {
     // mean the account cannot log in after repeated failures.
     push(
       "lockout after repeated failures",
-      !lockedLogin.ok || (lockedLogin.location || "").includes("error="),
-      `ok=${lockedLogin.ok} location=${lockedLogin.location || "none"}`,
+      lockedVerdict && (!lockedLogin.ok || (lockedLogin.location || "").includes("error=")),
+      `verdict=${lockedVerdict} ok=${lockedLogin.ok} location=${lockedLogin.location || "none"}`,
     );
   } catch (err) {
     results.push({ label: "setup", ok: false, detail: err.message });
