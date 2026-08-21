@@ -1,0 +1,34 @@
+name: Diag
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+          rustflags: ""
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build the lib tests
+        working-directory: src-tauri
+        run: cargo test --lib --no-run
+
+      - name: Run the test exe and capture the loader error
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem target/debug/deps/persea_desktop_lib-*.exe | Select-Object -First 1
+          Write-Host "exe: $($exe.FullName)"
+          & $exe.FullName 2>&1 | Out-String | Write-Host
+          Start-Sleep -Seconds 5
+          Get-WinEvent -LogName Application -MaxEvents 30 |
+            Where-Object { $_.ProviderName -match 'Application Error|Windows Error Reporting' } |
+            Select-Object -First 3 |
+            ForEach-Object { Write-Host "---"; Write-Host $_.TimeCreated; Write-Host $_.Message }
