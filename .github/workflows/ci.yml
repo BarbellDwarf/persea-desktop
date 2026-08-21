@@ -43,6 +43,10 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
         working-directory: src-tauri
+      - name: test (build only)
+        run: cargo test --no-run
+        working-directory: src-tauri
+
       - name: Give the windows test binaries a comctl32 v6 manifest
         if: runner.os == 'Windows'
         working-directory: src-tauri
@@ -52,7 +56,9 @@ jobs:
           # exists only in comctl32 v6; without a manifest the loader binds
           # System32's v5 and the exe dies with STATUS_ENTRYPOINT_NOT_FOUND.
           # The app binary embeds its manifest via tauri_build — test
-          # binaries have none, so drop an external one beside each.
+          # binaries have none, so drop an external one beside each. This
+          # must happen AFTER the link above: cargo's relink replaces the
+          # exes and any manifest written before it is stale.
           $manifest = @'
           <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
           <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
