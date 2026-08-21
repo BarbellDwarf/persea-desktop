@@ -26,7 +26,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          $exe = Get-ChildItem src-tauri/target/debug/deps/persea_desktop_lib-*.exe | Select-Object -First 1
+          $exe = Get-ChildItem target/debug/deps/persea_desktop_lib-*.exe | Select-Object -First 1
           Write-Host "exe: $($exe.FullName)"
           & $exe.FullName 2>&1 | Out-String | Write-Host
           Write-Host "exit code: $LASTEXITCODE"
