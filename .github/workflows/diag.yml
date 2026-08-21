@@ -51,6 +51,7 @@ jobs:
           $text = [System.Text.Encoding]::ASCII.GetString($bytes)
           Write-Host ("has <assembly marker: " + ($text -match '<assembly').ToString())
           Write-Host ("has Common-Controls: " + ($text -match 'Common-Controls').ToString())
+          exit 0
 
       - name: Audit the import table against the runner's DLLs
         working-directory: src-tauri
