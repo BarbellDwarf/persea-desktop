@@ -64,7 +64,9 @@ jobs:
           </assembly>
           '@
           Get-ChildItem target/debug/deps/*.exe | ForEach-Object {
-            Set-Content -Path "$($_.FullName).manifest" -Value $manifest
+            # The XML declaration must be the first bytes of the file;
+            # the here-string carries YAML indentation, so trim it.
+            Set-Content -Path "$($_.FullName).manifest" -Value $manifest.TrimStart()
           }
 
       - name: test
