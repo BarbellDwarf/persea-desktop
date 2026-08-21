@@ -63,6 +63,7 @@ fn main() {
             "pairing_open_confirm_page",
             "pairing_list_tokens",
             "pairing_revoke",
+            "cmd_token_acquire",
         ]));
     populate_remote_urls();
     tauri_build::try_build(attributes).expect("tauri-build with app manifest failed");
