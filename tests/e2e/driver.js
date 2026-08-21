@@ -83,7 +83,7 @@ function waitForPort(acceptDeadlineMs, expect) {
         if (expect === "open") {
           resolve();
         } else if (Date.now() > deadline) {
-          resolve();
+          reject(new Error(`port ${DRIVER_PORT} is still in use; the previous app did not release it`));
         } else {
           setTimeout(probe, 250);
         }
@@ -109,15 +109,23 @@ function waitForPort(acceptDeadlineMs, expect) {
 
 async function restartApp() {
   if (driverProcess) {
+    // SIGTERM first so a live app can shut down cleanly; if it is still
+    // holding the driver port after a short grace period, SIGKILL. The
+    // port MUST be released before the replacement spawns: a session
+    // attached to the dying app dies with ECONNREFUSED mid-spec.
     try {
       driverProcess.kill();
     } catch (_) {
       // already gone
     }
+    await waitForPort(5000, "closed").catch(() => {});
+    try {
+      driverProcess.kill("SIGKILL");
+    } catch (_) {
+      // already gone
+    }
+    await waitForPort(10000, "closed").catch(() => {});
     driverProcess = null;
-    // Wait for the dying app to release the driver port before spawning
-    // the replacement, so the new session cannot attach to a corpse.
-    await waitForPort(10000, "closed");
   }
   const fs = require("fs");
   const log = fs.openSync("tauri-driver.log", "w");
