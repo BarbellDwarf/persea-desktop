@@ -21,7 +21,7 @@ jobs:
         working-directory: src-tauri
         run: cargo test --lib --no-run
 
-      - name: Run the test exe and capture the loader error
+      - name: Run the test exe and capture every diagnostic
         working-directory: src-tauri
         shell: pwsh
         run: |
@@ -30,8 +30,24 @@ jobs:
           Write-Host "exe: $($exe.FullName)"
           & $exe.FullName 2>&1 | Out-String | Write-Host
           Write-Host "exit code: $LASTEXITCODE"
-          Start-Sleep -Seconds 5
-          Get-WinEvent -LogName Application -MaxEvents 40 |
-            Where-Object { $_.ProviderName -match 'Application Error|Windows Error Reporting|SideBySide' } |
-            Select-Object -First 5 |
-            ForEach-Object { Write-Host "---"; Write-Host $_.TimeCreated; Write-Host $_.Message }
+          Start-Sleep -Seconds 8
+
+          Write-Host "=== WER ReportQueue ==="
+          Get-ChildItem 'C:\ProgramData\Microsoft\Windows\WER\ReportQueue' -ErrorAction SilentlyContinue |
+            Where-Object Name -match 'persea' | ForEach-Object {
+              Write-Host "queue: $($_.FullName)"
+              Get-ChildItem $_.FullName | ForEach-Object {
+                Write-Host "--- $($_.Name)"
+                Get-Content $_.FullName -TotalCount 60 -ErrorAction SilentlyContinue | Out-String | Write-Host
+              }
+            }
+
+          Write-Host "=== Application event log (unfiltered, last 15) ==="
+          Get-WinEvent -LogName Application -MaxEvents 15 -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "---"; Write-Host "$($_.ProviderName) [$($_.Id)]"; Write-Host $_.Message }
+
+          Write-Host "=== embedded manifest check ==="
+          $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          Write-Host ("has <assembly marker: " + ($text -match '<assembly').ToString())
+          Write-Host ("has Common-Controls: " + ($text -match 'Common-Controls').ToString())
