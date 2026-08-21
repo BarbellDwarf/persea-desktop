@@ -93,6 +93,55 @@ Specs marked "CI" run only in the full matrix (they need guacd on 4822 or
 engine-specific plumbing); locally they degrade to render checks. Known
 skips are tracked here; a skip must name the reason, never delete the spec.
 
+## Full-check specs (local infra)
+
+The full-check specs (login, navigation, connection, ldap) verify real
+behavior against a target server and need local infra:
+
+- `login.spec.js`, `navigation.spec.js`: need `PERSEA_E2E_LOGIN_EMAIL` and
+  `PERSEA_E2E_LOGIN_PASSWORD` (real credentials on the target server);
+  they skip without them.
+- `login-cases.spec.js`: a case matrix from `PERSEA_E2E_LOGIN_CASES` (JSON
+  array of `{ username, password, expect: "dashboard" | "error", name }`).
+  Covers multiple users, emails, and negative cases.
+- `connection.spec.js`: needs SSH targets reachable from the server.
+  Default target: a container on the docker bridge (`172.17.0.1`), user
+  `sshuser` / `ssh-test-password-2026`, published on port 2222. Multiple
+  targets come from `PERSEA_E2E_SSH_TARGETS` (JSON array of
+  `{ host, port, user, password, name }`); the single-target env vars
+  (`PERSEA_E2E_SSH_HOST` / `_PORT` / `_USER` / `_PASSWORD`) still work.
+  The server must have guacd configured.
+  For an LDAP-passthrough target (SSH auth via the OpenLDAP harness):
+  run an Ubuntu container with `libnss-ldapd` and `libpam-ldapd`, nslcd
+  pointed at `ldap://172.17.0.1:3389` (base `dc=example,dc=com`, bind
+  `cn=admin,dc=example,dc=com` / admin), nsswitch `passwd`/`group` set to
+  `files ldap`, and sshd with password auth. The LDAP users need
+  `posixAccount` attributes (`uidNumber`, `gidNumber`) and a `posixGroup`
+  for their gid (`tests/e2e/ldap-posix.ldif`); then include a target with
+  `user: alice` in the JSON. The terminal must show the LDAP user's
+  prompt (the audit confirms auth passed through LDAP, not local accounts).
+- `rbac.spec.js`: role gates and group-based ACLs for database and LDAP
+  users. Needs admin credentials plus the LDAP users. The group-gated
+  folder case fails until persea#238 lands (LDAP group memberships are
+  not recorded on the user record).
+- `security.spec.js`: password policy, disabled accounts, brute-force
+  lockout. Needs admin credentials.
+
+## GitHub Actions audit
+
+`.github/workflows/audit.yml` (workflow_dispatch) runs the full-check
+suite on ubuntu-24.04 with OpenLDAP and guacd as service containers, the
+provisioned server, the LDAP provider configured by `tests/e2e/audit-ci.sh`
+(which also stands up the SSH targets), and uploads the screenshots as an
+artifact.
+- `ldap.spec.js`: needs an enabled LDAP provider on the server (the
+  running auth chain picks providers up at restart). The server repo
+  provides the harness: `docker compose -f docker-compose.ldap.yml up -d
+  --wait` (port 3389) plus the seed in `tests/fixtures/ldap-seed.ldif`
+  (alice / alice-ldap-password-2026). Configure the provider through the
+  admin auth page or `POST /api/auth/providers`, then restart the server.
+  The spec skips with a named reason when no provider is enabled.
+
 ## Screenshots
 
 `docs/screenshots/` holds the canonical desktop set (captured by
