@@ -7,3 +7,5 @@
 .idea/
 .vscode/
 /src-tauri/gen
+/audit-shots
+/tests/e2e/tauri-driver.log
