@@ -386,6 +386,45 @@ struct DesktopModePayload {
     on: bool,
 }
 
+// ---------------------------------------------------------------------------
+// Scoped-token auth-failure routing (D2)
+// ---------------------------------------------------------------------------
+
+/// Routes a 401 from a call that authenticated with the instance's
+/// scoped token (the desktop sign-in credential). Only a classified
+/// token-invalidated failure acts: the keychain record is cleared so
+/// the next probe stops presenting a dead credential and reports
+/// `authFailed` when another stored credential fails too, and the shell
+/// is told so Settings can offer the interactive re-login. Deliberately
+/// nothing else is touched: sessions and tabs stay open, and only the
+/// desktop API identity is affected. Returns whether the failure was
+/// routed as an invalidation.
+pub async fn scoped_token_rejected(app: &AppHandle, instance_url: &str, raw_error: &str) -> bool {
+    if !routes_to_invalidation(raw_error) {
+        return false;
+    }
+    let cleared = crate::token_store::delete_token(app.clone(), instance_url)
+        .await
+        .unwrap_or(false);
+    eprintln!(
+        "[bridge] scoped token rejected for {instance_url}; stored record {}",
+        if cleared { "cleared" } else { "already absent" }
+    );
+    let _ = app.emit(
+        crate::poller::EVENT_TOKEN_STATE,
+        serde_json::json!({ "instanceUrl": instance_url, "state": "invalidated" }),
+    );
+    true
+}
+
+/// Pure routing decision behind [`scoped_token_rejected`]: only the
+/// token-invalidated class clears the stored credential; network
+/// trouble, credential prompts and unknown errors change nothing.
+fn routes_to_invalidation(raw_error: &str) -> bool {
+    crate::token_store::classify_auth_error(raw_error)
+        == crate::token_store::AuthFailure::TokenInvalidated
+}
+
 #[derive(Debug, Deserialize)]
 struct RemoteCapabilityFile {
     identifier: String,
@@ -615,5 +654,22 @@ mod tests {
         assert!(script.contains("perseaShell"));
         assert!(script.contains("try {"));
         assert!(script.contains("catch (e)"));
+    }
+
+    #[test]
+    fn only_token_invalidation_routes_to_clearing() {
+        assert!(routes_to_invalidation("HTTP 401"));
+        assert!(routes_to_invalidation("token expired"));
+        assert!(routes_to_invalidation("invalidated credential"));
+        // Network trouble, credential prompts, lockout, MFA and unknown
+        // errors must never clear the stored credential.
+        assert!(!routes_to_invalidation("connection refused"));
+        assert!(!routes_to_invalidation("request timed out"));
+        assert!(!routes_to_invalidation(
+            "login failed: the server rejected the username or password"
+        ));
+        assert!(!routes_to_invalidation("account locked"));
+        assert!(!routes_to_invalidation(""));
+        assert!(!routes_to_invalidation("status 500"));
     }
 }

@@ -120,33 +120,48 @@ async function newSession() {
       "wdio:tauriServiceOptions": { windowLabel: "main" },
     })
     .forBrowser("wry");
-  const driver = builder.build();
-  if (IS_MACOS) {
-    // The embedded WebDriver server binds before the app finishes
-    // startup (main window, webview, initial navigation), so early
-    // commands can hit a half-created page and the startup can reload
-    // the webview under the session. Wait until the shell page is
-    // present and stable across two reads before handing the driver out.
-    const deadline = Date.now() + 30000;
-    for (;;) {
-      const first = await driver
-        .executeScript(
-          "return { url: location.href, ready: document.readyState, form: !!document.getElementById('welcome-form') }",
-        )
-        .catch(() => null);
-      await new Promise((r) => setTimeout(r, 600));
-      const second = await driver
-        .executeScript("return { url: location.href, ready: document.readyState }")
-        .catch(() => null);
-      const stable =
-        first &&
-        second &&
-        first.url === second.url &&
-        first.ready === "complete" &&
-        second.ready === "complete";
-      if (stable || Date.now() > deadline) {
-        break;
+  // The driver can die between the port probe and the session build
+  // (macOS: the previous app instance still holding the port), so
+  // retry the build on connection errors instead of failing the spec.
+  let driver = null;
+  const buildDeadline = Date.now() + 20000;
+  for (;;) {
+    try {
+      // The build is async; without the await the rejection escapes the
+      // try/catch and the retry never happens.
+      driver = await builder.build();
+      break;
+    } catch (e) {
+      if (Date.now() > buildDeadline) {
+        throw e;
       }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  // The WebDriver server binds before the app finishes startup (main
+  // window, webview, initial navigation), so early commands can hit a
+  // half-created page and the startup can reload the webview under the
+  // session. Wait until the page is present and stable across two
+  // reads before handing the driver out, on every platform.
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    const first = await driver
+      .executeScript(
+        "return { url: location.href, ready: document.readyState, form: !!document.getElementById('welcome-form') }",
+      )
+      .catch(() => null);
+    await new Promise((r) => setTimeout(r, 600));
+    const second = await driver
+      .executeScript("return { url: location.href, ready: document.readyState }")
+      .catch(() => null);
+    const stable =
+      first &&
+      second &&
+      first.url === second.url &&
+      first.ready === "complete" &&
+      second.ready === "complete";
+    if (stable || Date.now() > deadline) {
+      break;
     }
   }
   return driver;

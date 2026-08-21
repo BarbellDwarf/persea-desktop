@@ -35,6 +35,12 @@ pub const MIN_SERVER_FULL: &str = "1.0.0";
 
 static STORE: Mutex<Option<Arc<Mutex<InstanceStore>>>> = Mutex::new(None);
 
+/// App handle captured at setup: lets the probe read the stored
+/// credentials for the auth-failure check without threading the handle
+/// through every probe caller. Unset in unit tests, where the check
+/// then simply finds no credential.
+static APP_HANDLE: Mutex<Option<tauri::AppHandle>> = Mutex::new(None);
+
 // ---------------------------------------------------------------------------
 // Data model
 // ---------------------------------------------------------------------------
@@ -110,6 +116,13 @@ pub struct CachedProbe {
     /// True when `GET /` redirects to `/setup` (server first run).
     #[serde(default, rename = "needsSetup")]
     pub needs_setup: bool,
+    /// True when the instance answered but rejected the stored
+    /// credential with an auth error (compliance-mode behavior: admin
+    /// API keys and self-service tokens stop authenticating while
+    /// scoped tokens keep working). The shell offers the desktop
+    /// sign-in for such instances.
+    #[serde(default, rename = "authFailed")]
+    pub auth_failed: bool,
     #[serde(default, rename = "checkedAt")]
     pub checked_at: u64,
     /// Friendly reason for a failed probe (TLS trust, DNS, connectivity),
@@ -426,9 +439,21 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     sync_provisioned(&mut store)?;
     let store = Arc::new(Mutex::new(store));
     *STORE.lock().unwrap() = Some(store.clone());
+    set_app_handle(app.handle().clone());
     refresh_probes_in_background(store.clone());
     auto_open(app, &store);
     Ok(())
+}
+
+fn set_app_handle(handle: tauri::AppHandle) {
+    if let Ok(mut slot) = APP_HANDLE.lock() {
+        *slot = Some(handle);
+    }
+}
+
+fn app_handle() -> Option<tauri::AppHandle> {
+    let guard = APP_HANDLE.lock().ok()?;
+    guard.clone()
 }
 
 fn store_handle() -> Option<Arc<Mutex<InstanceStore>>> {
@@ -564,6 +589,10 @@ pub struct ProbeView {
     pub update_available: bool,
     #[serde(rename = "needsSetup")]
     pub needs_setup: bool,
+    /// The instance is reachable but rejected the stored credential;
+    /// the shell offers the desktop sign-in (login.html) for it.
+    #[serde(rename = "authFailed")]
+    pub auth_failed: bool,
     #[serde(rename = "checkedAt")]
     pub checked_at: u64,
     /// Human-readable warnings derived from the probe: old server,
@@ -596,6 +625,7 @@ fn instance_view(i: &Instance) -> InstanceView {
             latest_version: p.latest_version.clone(),
             update_available: p.update_available,
             needs_setup: p.needs_setup,
+            auth_failed: p.auth_failed,
             checked_at: p.checked_at,
             warnings: probe_warnings(&i.url, p),
         }),
@@ -640,6 +670,7 @@ pub async fn probe_server(base_url: &str, allow_insecure_tls: bool) -> CachedPro
     match fetch_status(&client, &base).await {
         Ok((version, capabilities, latest_version, update_available)) => {
             let needs_setup = fetch_needs_setup(&client, &base).await;
+            let auth_failed = probe_auth_failed(&client, &base).await;
             CachedProbe {
                 ok: true,
                 version,
@@ -647,6 +678,7 @@ pub async fn probe_server(base_url: &str, allow_insecure_tls: bool) -> CachedPro
                 latest_version,
                 update_available,
                 needs_setup,
+                auth_failed,
                 checked_at: now_secs(),
                 error: None,
             }
@@ -679,6 +711,7 @@ fn unreachable_probe(reason: String) -> CachedProbe {
         latest_version: None,
         update_available: false,
         needs_setup: false,
+        auth_failed: false,
         checked_at: now_secs(),
         error: Some(reason),
     }
@@ -746,6 +779,40 @@ async fn fetch_needs_setup(client: &reqwest::Client, base: &str) -> bool {
         return false;
     };
     resp.url().path().starts_with("/setup")
+}
+
+/// Auth-failure detection (compliance-mode behavior): the instance is
+/// reachable (the status endpoint answered), so a 401 on an
+/// authenticated request means the stored credential stopped
+/// authenticating. Presented with the scoped token when one is stored
+/// and unexpired (the desktop sign-in's live credential), else with the
+/// newest paired device token. Without any stored credential there is
+/// nothing to reject and the flag stays false; transport errors count
+/// as inconclusive, never as auth failures.
+async fn probe_auth_failed(client: &reqwest::Client, base: &str) -> bool {
+    let Some(bearer) = stored_bearer(base).await else {
+        return false;
+    };
+    let resp = client
+        .get(format!("{base}/api/sessions"))
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {bearer}"))
+        .send()
+        .await;
+    matches!(resp, Ok(r) if r.status() == reqwest::StatusCode::UNAUTHORIZED)
+}
+
+/// The credential the auth-failure check should present, preferring the
+/// scoped token: once the user signed in on the desktop, a valid scoped
+/// token proves authentication works even though compliance mode keeps
+/// rejecting the older pairing credential.
+async fn stored_bearer(base_url: &str) -> Option<String> {
+    let app = app_handle()?;
+    if let Ok(Some(record)) = crate::token_store::get_token(app.clone(), base_url).await {
+        if !crate::token_store::is_expired(&record, now_secs()) {
+            return Some(record.token);
+        }
+    }
+    crate::pairing::token_for(&app, base_url).await
 }
 
 fn now_secs() -> u64 {
@@ -1080,7 +1147,7 @@ pub fn cmd_instances_open(app: tauri::AppHandle, url: String) -> Result<(), Stri
     // viewport so each server keeps its own login cookie.
     if crate::windows::main_window_needs_rebuild(&url) {
         eprintln!("persea-desktop: switching instance store to {url}; rebuilding the viewport");
-        crate::windows::rebuild_main_window(&app, &url)
+        crate::windows::rebuild_main_window(&app, &url, &url)
     } else {
         navigate_main(&app, &url)
     }
@@ -1101,12 +1168,14 @@ pub fn cmd_instances_open_default(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn cmd_instances_open_setup(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let url = validate_instance_url(&url)?;
-    // Same per-instance store rule as open: the setup page runs in the
-    // instance's own webview store.
-    if crate::windows::main_window_needs_rebuild(&url) {
-        crate::windows::rebuild_main_window(&app, &url)?;
-    }
     let setup_url = format!("{url}/setup");
+    // Same per-instance store rule as open: the setup page runs in the
+    // instance's own webview store. The rebuild navigates to the setup
+    // page itself once the new window exists, so the command must not
+    // navigate before the rebuild finishes.
+    if crate::windows::main_window_needs_rebuild(&url) {
+        return crate::windows::rebuild_main_window(&app, &url, &setup_url);
+    }
     let parsed = url::Url::parse(&setup_url).map_err(|e| e.to_string())?;
     let win = app
         .get_webview_window(window_label(&url))
@@ -1166,6 +1235,7 @@ mod tests {
                 latest_version: Some("1.3.0".into()),
                 update_available: true,
                 needs_setup: false,
+                auth_failed: false,
                 checked_at: 42,
                 error: None,
             }),
@@ -1310,6 +1380,7 @@ mod tests {
             latest_version: None,
             update_available: false,
             needs_setup: false,
+            auth_failed: true,
             checked_at: 1,
             error: None,
         };
@@ -1317,6 +1388,8 @@ mod tests {
         assert!(!merged.ok);
         assert_eq!(merged.version, "1.0.0");
         assert!(merged.capabilities["kiosk_allowed"]);
+        // A failed reprobe keeps the last known auth state too.
+        assert!(merged.auth_failed);
         assert!(merged.checked_at >= 1);
         let fresh = apply_probe(Some(probe.clone()), probe.clone());
         assert!(fresh.ok);
@@ -1584,6 +1657,7 @@ mod tests {
                 latest_version: None,
                 update_available: false,
                 needs_setup: false,
+                auth_failed: false,
                 checked_at: 7,
                 error: None,
             }

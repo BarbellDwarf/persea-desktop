@@ -25,17 +25,18 @@ NPM_VOLUME="persea-audit-npm"
 
 AUDIT_DEB=1
 SERVER_DIR=""
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-deb) AUDIT_DEB=0 ;;
     --server-dir)
       SERVER_DIR="${2:-}"
       [ -n "$SERVER_DIR" ] || { echo "[audit] --server-dir needs a path" >&2; exit 1; }
-      shift
+      shift 2
+      continue
       ;;
-    *) echo "unknown option: $arg" >&2; exit 1 ;;
+    *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
-  shift || true
+  shift
 done
 
 command -v docker >/dev/null 2>&1 || { echo "[audit] docker is required" >&2; exit 1; }
