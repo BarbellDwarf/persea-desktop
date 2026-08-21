@@ -103,6 +103,12 @@ jobs:
           PERSEA_E2E_APPS_DIR: ../../src-tauri/target/debug
         run: node run-specs.js
 
+      - name: Collect the macOS crash reports on failure
+        if: failure() && runner.os == 'macOS'
+        run: |
+          mkdir -p tests/e2e/crash-reports
+          cp ~/Library/Logs/DiagnosticReports/persea* tests/e2e/crash-reports/ 2>/dev/null || true
+
       - name: Upload the driver and app logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -110,6 +116,7 @@ jobs:
           name: e2e-logs-${{ matrix.os }}
           path: |
             tests/e2e/tauri-driver.log
+            tests/e2e/crash-reports/
           if-no-files-found: ignore
           retention-days: 7
 

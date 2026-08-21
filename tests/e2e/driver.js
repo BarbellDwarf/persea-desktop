@@ -127,6 +127,7 @@ async function restartApp() {
     await waitForPort(10000, "closed").catch(() => {});
     driverProcess = null;
   }
+  applyPendingSeed();
   const fs = require("fs");
   const log = fs.openSync("tauri-driver.log", "w");
   driverProcess = spawn(APP_PATH, [], {
@@ -139,6 +140,8 @@ async function restartApp() {
 async function newSession() {
   if (IS_MACOS) {
     await restartApp();
+  } else {
+    applyPendingSeed();
   }
   const builder = new Builder()
     .usingServer(`http://127.0.0.1:${DRIVER_PORT}`)
@@ -218,7 +221,14 @@ function screenshot(driver, name) {
 
 // Pre-seed the shell's instance store before the app launches. The
 // navigation lockdown only allows origins present in the store.
-function seedInstances(instances) {
+//
+// The write is deferred to the next spawn: a still-shutting-down app
+// saves its own store on exit and would clobber a seed written before
+// it died (persea-desktop#104). newSession applies the seed after the
+// old process is gone and before the replacement spawns.
+let pendingSeed = null;
+
+function instanceStorePath() {
   const { homedir } = require("os");
   const { join } = require("path");
   const configDir = process.platform === "win32"
@@ -227,10 +237,20 @@ function seedInstances(instances) {
       ? join(homedir(), "Library", "Application Support", "dev.persea.desktop")
       : join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "dev.persea.desktop");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(
-    join(configDir, "instances.json"),
-    JSON.stringify({ instances, lastUsed: instances.find((i) => i.default)?.url || null }),
-  );
+  return join(configDir, "instances.json");
+}
+
+function seedInstances(instances) {
+  pendingSeed = JSON.stringify({
+    instances,
+    lastUsed: instances.find((i) => i.default)?.url || null,
+  });
+}
+
+function applyPendingSeed() {
+  if (pendingSeed === null) return;
+  writeFileSync(instanceStorePath(), pendingSeed);
+  pendingSeed = null;
 }
 
 module.exports = { startDriver, stopDriver, newSession, screenshot, seedInstances };
