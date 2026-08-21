@@ -25,11 +25,13 @@ jobs:
         working-directory: src-tauri
         shell: pwsh
         run: |
-          $exe = Get-ChildItem target/debug/deps/persea_desktop_lib-*.exe | Select-Object -First 1
+          $ErrorActionPreference = 'Continue'
+          $exe = Get-ChildItem src-tauri/target/debug/deps/persea_desktop_lib-*.exe | Select-Object -First 1
           Write-Host "exe: $($exe.FullName)"
           & $exe.FullName 2>&1 | Out-String | Write-Host
+          Write-Host "exit code: $LASTEXITCODE"
           Start-Sleep -Seconds 5
-          Get-WinEvent -LogName Application -MaxEvents 30 |
-            Where-Object { $_.ProviderName -match 'Application Error|Windows Error Reporting' } |
-            Select-Object -First 3 |
+          Get-WinEvent -LogName Application -MaxEvents 40 |
+            Where-Object { $_.ProviderName -match 'Application Error|Windows Error Reporting|SideBySide' } |
+            Select-Object -First 5 |
             ForEach-Object { Write-Host "---"; Write-Host $_.TimeCreated; Write-Host $_.Message }
