@@ -393,7 +393,7 @@ fn parse_rfc3339(raw: &str) -> Option<u64> {
         return None;
     }
 
-    let time = time.trim_end_matches(|c| c == 'Z' || c == 'z');
+    let time = time.trim_end_matches(['Z', 'z']);
     let (hms, offset) = match time.find(['+', '-']) {
         Some(idx) => (&time[..idx], Some(&time[idx..])),
         None => (time, None),
