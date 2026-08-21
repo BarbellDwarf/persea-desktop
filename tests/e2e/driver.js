@@ -107,8 +107,28 @@ function waitForPort(acceptDeadlineMs, expect) {
   });
 }
 
+async function waitForExit(pid, timeoutMs) {
+  // The process is gone when kill(pid, 0) reports ESRCH. Waiting for the
+  // full exit (not just the socket closing) matters: a shutting-down app
+  // saves its instance store on the way out and would clobber a seed
+  // written too early (persea-desktop#104).
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch (_) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`app pid ${pid} did not exit within ${timeoutMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
 async function restartApp() {
   if (driverProcess) {
+    const pid = driverProcess.pid;
     // SIGTERM first so a live app can shut down cleanly; if it is still
     // holding the driver port after a short grace period, SIGKILL. The
     // port MUST be released before the replacement spawns: a session
@@ -125,6 +145,9 @@ async function restartApp() {
       // already gone
     }
     await waitForPort(10000, "closed").catch(() => {});
+    if (pid) {
+      await waitForExit(pid, 10000).catch(() => {});
+    }
     driverProcess = null;
   }
   applyPendingSeed();

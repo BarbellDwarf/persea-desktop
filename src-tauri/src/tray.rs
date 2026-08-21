@@ -165,6 +165,20 @@ fn create_tray(app: &AppHandle) {
 /// when the tray host is unavailable the kiosk menu (sessions only)
 /// still renders via the kiosk flag.
 pub fn set_kiosk(app: &AppHandle, kiosk: bool) {
+    // AppKit demands status-bar changes on the main thread: removing the
+    // NSStatusItem from a tokio worker traps in
+    // -[BSServiceMainRunLoopQueue assertBarrierOnQueue] and kills the app
+    // (macOS, persea-desktop#104). The kiosk-toggle listener fires on a
+    // worker, so marshal the whole update onto the main thread.
+    let handle = app.clone();
+    if let Err(e) = app.run_on_main_thread(move || {
+        set_kiosk_on_main(&handle, kiosk);
+    }) {
+        eprintln!("[tray] could not marshal the kiosk tray update to the main thread: {e}");
+    }
+}
+
+fn set_kiosk_on_main(app: &AppHandle, kiosk: bool) {
     let Some(state) = state_handle() else { return };
     let changed = {
         let mut state = state.lock().unwrap();
