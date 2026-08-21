@@ -22,6 +22,7 @@ jobs:
         run: cargo test --lib --no-run
 
       - name: Run the test exe and capture the loader error
+        working-directory: src-tauri
         shell: pwsh
         run: |
           $exe = Get-ChildItem target/debug/deps/persea_desktop_lib-*.exe | Select-Object -First 1
