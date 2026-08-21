@@ -101,6 +101,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -108,7 +109,10 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
-use tauri::{Emitter, EventTarget, Listener, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    Emitter, EventTarget, Listener, Manager, Runtime, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
 use url::Url;
 
 use crate::navigation::{self, NavigationPolicy};
@@ -1137,7 +1141,6 @@ fn save_prefs(
 struct WindowManager {
     app: tauri::AppHandle,
     state: TabState,
-    policy: NavigationPolicy,
     /// Shell-side strip override (kiosk mode hides the strip).
     strip_enabled: bool,
 }
@@ -1164,13 +1167,188 @@ fn send(msg: Msg) -> Result<(), String> {
 }
 
 fn current_policy() -> NavigationPolicy {
-    manager().map(|m| m.policy.clone()).unwrap_or_else(|| {
-        let origins: Vec<String> = crate::instances::instances()
-            .iter()
-            .map(|i| i.url.clone())
-            .collect();
-        NavigationPolicy::new(origins, Vec::new())
-    })
+    // Derived from the live instance store on every navigation, so a
+    // server added at runtime is immediately navigable in the webview.
+    let origins: Vec<String> = crate::instances::instances()
+        .iter()
+        .map(|i| i.url.clone())
+        .collect();
+    NavigationPolicy::new(origins, Vec::new())
+}
+
+// ---------------------------------------------------------------------------
+// Main viewport build + instance switching (per-instance webview stores)
+// ---------------------------------------------------------------------------
+
+/// True under the WebDriver automation: the driver needs the default
+/// webview data store (msedgedriver reads the DevToolsActivePort file
+/// from there), so the per-instance stores and the rebuild path are
+/// skipped when automated.
+pub fn automation_enabled() -> bool {
+    std::env::var("TAURI_WEBVIEW_AUTOMATION").as_deref() == Ok("true")
+}
+
+/// The instance URL the main viewport's webview store belongs to. The
+/// store is fixed at webview creation; switching instances outside the
+/// automation rebuilds the viewport with the target instance's store.
+static MAIN_STORE_INSTANCE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+/// Guards the Linux quit-on-close while a rebuild replaces the window.
+static REBUILD_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+fn main_store_instance() -> Option<String> {
+    MAIN_STORE_INSTANCE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap()
+        .clone()
+}
+
+pub fn set_main_store_instance(instance_url: &str) {
+    *MAIN_STORE_INSTANCE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap() = Some(instance_url.to_string());
+}
+
+pub fn rebuild_in_progress() -> bool {
+    REBUILD_IN_PROGRESS.load(Ordering::SeqCst)
+}
+
+/// Pure decision: does opening `target` need a viewport rebuild so its
+/// webview store matches? A missing current store means the window was
+/// just built for the target; under the automation the store is shared,
+/// so never.
+pub fn should_rebuild(current: Option<&str>, target: &str, automation: bool) -> bool {
+    !automation && current.is_some() && current != Some(target)
+}
+
+/// Whether opening `instance_url` needs the main viewport rebuilt.
+pub fn main_window_needs_rebuild(instance_url: &str) -> bool {
+    should_rebuild(
+        main_store_instance().as_deref(),
+        instance_url,
+        automation_enabled(),
+    )
+}
+
+/// Build the main viewport window for `instance_url`: the code-built
+/// window with the navigation lockdown, the bridge init script, the
+/// download handler, the per-instance webview store (skipped under the
+/// automation, where the driver needs the default store), and the Linux
+/// close policy (quit for real, unless a rebuild is in flight).
+pub fn build_main_window(
+    app: &tauri::AppHandle,
+    instance_url: &str,
+) -> Result<WebviewWindow, Box<dyn std::error::Error>> {
+    let automation = automation_enabled();
+    let mut builder =
+        WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, WebviewUrl::App("index.html".into()))
+            .title("Persea Desktop")
+            .inner_size(1280.0, 800.0)
+            .min_inner_size(800.0, 600.0)
+            .center()
+            .initialization_script(crate::bridge::init_script());
+    if !automation {
+        let (store_id, data_dir) = instance_webview_data(app, instance_url);
+        builder = builder.data_directory(data_dir);
+        if let Some(id) = store_id {
+            builder = builder.data_store_identifier(id);
+        }
+    }
+    if automation {
+        // msedgedriver attaches over CDP: WebView2 only writes the
+        // DevToolsActivePort file when remote debugging is in the
+        // environment's browser args.
+        builder = builder.additional_browser_args("--remote-debugging-port=0");
+    } else if let Some(args) = crate::platform::webview2_browser_args() {
+        builder = builder.additional_browser_args(&args);
+    }
+    if crate::kiosk::is_active() {
+        builder = builder.devtools(false);
+    }
+    let builder = lock_viewport_builder(builder, app.clone());
+    let main = builder.build()?;
+
+    // Linux: the tray and the in-window menu bar are unreliable on
+    // Wayland (no appindicator support), so closing the main window
+    // would strand the process with no visible way to quit. Quit for
+    // real on close; kiosk keeps its own prevent-close handler, and an
+    // instance switch rebuild must not quit.
+    #[cfg(target_os = "linux")]
+    {
+        let app_handle = app.clone();
+        main.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if !crate::kiosk::is_active() && !rebuild_in_progress() {
+                    app_handle.exit(0);
+                }
+            }
+        });
+    }
+
+    set_main_store_instance(instance_url);
+    watch_main_window(app);
+    Ok(main)
+}
+
+/// Destroy and rebuild the main viewport for `instance_url` so its
+/// webview store matches, then navigate to `navigate_to` (normally the
+/// instance URL itself; the setup flow passes the instance's `/setup`
+/// page). The destroy is async, so the new window is built on the main
+/// thread after the old one is gone. A rebuild already in flight is
+/// refused: destroying the freshly built window mid-build would lose
+/// the new viewport.
+pub fn rebuild_main_window(
+    app: &tauri::AppHandle,
+    instance_url: &str,
+    navigate_to: &str,
+) -> Result<(), String> {
+    if rebuild_in_progress() {
+        return Err("viewport rebuild already in progress; try again".into());
+    }
+    REBUILD_IN_PROGRESS.store(true, Ordering::SeqCst);
+    if let Some(win) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        eprintln!("persea-desktop: destroying the main window for the store switch");
+        win.destroy().map_err(|e| e.to_string())?;
+    }
+    let app = app.clone();
+    let url = instance_url.to_string();
+    let nav = navigate_to.to_string();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(250));
+        let handle = app.clone();
+        let target = url.clone();
+        let _ = handle.clone().run_on_main_thread(move || {
+            let built = build_main_window(&handle, &target);
+            match &built {
+                Ok(win) => {
+                    eprintln!("persea-desktop: viewport rebuilt for {target}");
+                    if let Ok(parsed) = url::Url::parse(&nav) {
+                        let _ = win.navigate(parsed);
+                    }
+                }
+                Err(e) => eprintln!("persea-desktop: viewport rebuild FAILED for {target}: {e}"),
+            }
+            REBUILD_IN_PROGRESS.store(false, Ordering::SeqCst);
+        });
+    });
+    Ok(())
+}
+
+/// Keep the tab strip docked to the main window: recompute the strip
+/// position when the viewport moves, resizes, or changes scale. Called
+/// at build time (initial and rebuilt windows).
+pub fn watch_main_window(app: &tauri::AppHandle) {
+    if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        main.on_window_event(|event| match event {
+            tauri::WindowEvent::Moved(_)
+            | tauri::WindowEvent::Resized(_)
+            | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+                let _ = send(Msg::DockNow);
+            }
+            _ => {}
+        });
+    }
 }
 
 /// The canonical per-instance webview data directory + store identifier.
@@ -1287,11 +1465,6 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&config_dir)?;
     let prefs = load_prefs(&config_dir);
     let (default_mode, overrides) = prefs_to_state(&prefs);
-    let origins: Vec<String> = crate::instances::instances()
-        .iter()
-        .map(|i| i.url.clone())
-        .collect();
-    let policy = NavigationPolicy::new(origins.clone(), Vec::new());
     let mut state = TabState::new(default_mode);
     state.overrides = overrides;
 
@@ -1303,7 +1476,6 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let manager = WindowManager {
         app: app_handle.clone(),
         state,
-        policy,
         strip_enabled: true,
     };
     let _ = MANAGER.set(Mutex::new(manager));
@@ -1365,18 +1537,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let _ = cycle_tx.send(Msg::Next);
     });
 
-    // The main window drives the strip's dock position.
-    let move_tx = tx.clone();
-    if let Some(main) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
-        main.on_window_event(move |event| match event {
-            tauri::WindowEvent::Moved(_)
-            | tauri::WindowEvent::Resized(_)
-            | tauri::WindowEvent::ScaleFactorChanged { .. } => {
-                let _ = move_tx.send(Msg::DockNow);
-            }
-            _ => {}
-        });
-    }
+    // The main window drives the strip's dock position (re-attached by
+    // build_main_window after an instance-switch rebuild).
+    watch_main_window(&app_handle);
 
     std::thread::spawn(move || worker_loop(app_handle, rx));
     Ok(())
@@ -2020,6 +2183,31 @@ pub fn cmd_tabs_context_menu(id: String, x: f64, y: f64) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rebuild_decision_matches_the_instance_store() {
+        // Same instance: no rebuild.
+        assert!(!should_rebuild(
+            Some("https://a.example.com"),
+            "https://a.example.com",
+            false
+        ));
+        // Different instance: rebuild so the store follows.
+        assert!(should_rebuild(
+            Some("https://a.example.com"),
+            "https://b.example.com",
+            false
+        ));
+        // First build (no current store): no rebuild, the window is
+        // created fresh for the target.
+        assert!(!should_rebuild(None, "https://a.example.com", false));
+        // Under the WebDriver automation the store is shared: never.
+        assert!(!should_rebuild(
+            Some("https://a.example.com"),
+            "https://b.example.com",
+            true
+        ));
+    }
 
     fn url(s: &str) -> Url {
         Url::parse(s).unwrap()

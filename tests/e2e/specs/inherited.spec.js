@@ -17,13 +17,27 @@ async function waitForText(driver, text, timeoutMs = 15000) {
   await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), '${text}')]`)), timeoutMs);
 }
 
+// The webview cookie store persists across app instances, so an earlier
+// spec's login can land here on the dashboard. Log out through the
+// header button (POST with CSRF) and wait for the login page.
+async function ensureLoginPage(driver) {
+  const { until, By } = require("selenium-webdriver");
+  try {
+    await waitForText(driver, "Sign in", 8000);
+  } catch {
+    await driver.wait(until.elementLocated(By.id("logout-btn")), 10000);
+    await driver.findElement(By.id("logout-btn")).click();
+    await waitForText(driver, "Sign in", 15000);
+  }
+}
+
 module.exports = async function () {
   seedInstances([{ name: "E2E", url: BASE, default: true }]);
   const driver = await newSession();
 
   try {
     // The default instance opens in the viewport: login page renders.
-    await waitForText(driver, "Sign in");
+    await ensureLoginPage(driver);
     await screenshot(driver, "web-login");
 
     // Docs page is public.

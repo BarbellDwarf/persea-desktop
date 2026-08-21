@@ -1,0 +1,94 @@
+name: Audit
+
+# Full-check desktop audit: builds the app, provisions a test persea
+# server, configures the LDAP harness (OpenLDAP + provider), stands up the
+# SSH targets (local user and LDAP passthrough via nslcd), and runs the
+# whole e2e suite: shell pages, login matrix, navigation, live SSH
+# sessions, LDAP login, RBAC, and security functions. Screenshots upload
+# as an artifact. Dispatch-only (heavy); the e2e.yml workflow covers the
+# per-PR base suite.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    services:
+      ldap:
+        image: osixia/openldap:1.5.0
+        ports:
+          - 3389:389
+        env:
+          LDAP_ORGANISATION: Example
+          LDAP_DOMAIN: example.com
+          LDAP_ADMIN_PASSWORD: admin
+      guacd:
+        image: guacamole/guacd:latest
+        ports:
+          - 4822:4822
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev \
+            xvfb openssh-server webkit2gtk-driver ldap-utils
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+          rustflags: ""
+
+      - name: Build the app
+        working-directory: src-tauri
+        run: cargo build
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Provision the test persea server
+        id: server
+        run: |
+          git clone --no-checkout https://github.com/persea-grove/persea.git /tmp/persea
+          git -C /tmp/persea checkout "${PERSEA_E2E_SERVER_REF:-43215ab}"
+          "$GITHUB_WORKSPACE/tests/e2e/provision-server.sh" /tmp/persea 8099 | tee /tmp/provision.env
+          grep -E "^PERSEA_E2E" /tmp/provision.env >> "$GITHUB_ENV"
+
+      - name: Audit CI setup (LDAP, provider, SSH targets)
+        env:
+          PERSEA_SERVER_DIR: /tmp/persea
+          PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
+          PERSEA_E2E_SERVER_PID: ${{ env.PERSEA_E2E_PID }}
+          PERSEA_E2E_SERVER_WORK: ${{ env.PERSEA_E2E_WORK }}
+        run: bash tests/e2e/audit-ci.sh
+
+      - name: Install the WebDriver client
+        working-directory: tests/e2e
+        run: npm install
+
+      - name: Run the full-check suite
+        working-directory: tests/e2e
+        env:
+          PERSEA_E2E_BASE_URL: ${{ env.PERSEA_E2E_BASE_URL }}
+          PERSEA_E2E_LOGIN_EMAIL: e2e-admin
+          PERSEA_E2E_LOGIN_PASSWORD: e2e-admin-password-12345
+          PERSEA_E2E_LDAP_USERNAME: alice
+          PERSEA_E2E_LDAP_PASSWORD: alice-ldap-password-2026
+          PERSEA_E2E_APPS_DIR: ../../src-tauri/target/debug
+          PERSEA_E2E_SHOTS: ../../audit-shots
+          PERSEA_E2E_SSH_TARGETS: '[{"host":"127.0.0.1","port":2222,"user":"sshuser","password":"ssh-test-password-2026","name":"local"},{"host":"127.0.0.1","port":2222,"user":"alice","password":"alice-ldap-password-2026","name":"ldap"}]'
+          PERSEA_E2E_LOGIN_CASES: '[{"username":"e2e-admin","password":"e2e-admin-password-12345","expect":"dashboard","name":"admin"},{"username":"alice","password":"alice-ldap-password-2026","expect":"dashboard","name":"alice-ldap-groups"},{"username":"bob","password":"bob-ldap-password-2026","expect":"dashboard","name":"bob-ldap"},{"username":"alice","password":"wrong-password-2026","expect":"error","name":"alice-wrong-password"},{"username":"carol","password":"carol-ldap-password-2026","expect":"error","name":"unknown-user"}]'
+        run: xvfb-run -a node run-specs.js
+
+      - name: Upload the audit screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-screenshots
+          path: audit-shots

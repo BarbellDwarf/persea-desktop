@@ -29,6 +29,15 @@
 //! reseeds from a fresh poll, so sessions that changed while signed out
 //! never spam notifications.
 //!
+//! Scoped-token watch (D2): a second background task re-reads each
+//! configured instance's stored desktop sign-in token every minute and
+//! emits `token-state` events ("ok" | "expiring" | "expired") when the
+//! state changes, so Settings can offer an interactive renew sign-in
+//! before the 12-hour expiry bites. There is no silent refresh: the app
+//! never stores the password, so renewal always goes through login.html.
+//! The payload carries the instance URL and the state name only; the
+//! token itself never leaves the keychain.
+//!
 //! Idle-warning approximation (locked design): the list endpoint does not
 //! carry the server's idle reaper timeout, but `GET /api/sessions/{id}`
 //! does (`session_idle_timeout_secs`, a global config value). The task
@@ -46,7 +55,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::StatusCode;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::instances;
 use crate::{http, notify, pairing};
@@ -67,6 +76,18 @@ const HEARTBEAT_EVERY: Duration = Duration::from_secs(60);
 /// Idle-warning horizon in seconds (matches the page's 60s-before-reap
 /// toast).
 const IDLE_WARNING_HORIZON_SECS: u64 = 60;
+/// Scoped-token watch cadence: expiry matters on a 12-hour scale, so a
+/// minute of resolution is plenty and keeps keychain reads rare.
+pub const TOKEN_WATCH_INTERVAL: Duration = Duration::from_secs(60);
+/// Even without a change, re-broadcast the token states every N watch
+/// ticks so a Settings page opened mid-window still learns the state
+/// (worst-case staleness 10 minutes against a 30-minute renewal window).
+const TOKEN_BROADCAST_EVERY_TICKS: u32 = 10;
+/// Shell event: per-instance scoped-token state. Payload:
+/// `{ "instanceUrl": <url>, "state": "ok" | "expiring" | "expired" |
+/// "invalidated" }`. The watcher sends the first three; "invalidated"
+/// comes from the bridge's 401 routing. No token material, ever.
+pub const EVENT_TOKEN_STATE: &str = "token-state";
 
 // ---------------------------------------------------------------------------
 // Session view + diff engine (pure, unit-tested)
@@ -507,6 +528,9 @@ struct InstanceState {
 /// when their instance disappears; the handle is aborted on removal so a
 /// re-added instance never runs two pollers (duplicate notifications).
 pub fn start(app: &AppHandle) {
+    // Scoped-token lifecycle watch (D2): independent of pairing, it
+    // follows the configured instances' desktop sign-in records.
+    tauri::async_runtime::spawn(watch_tokens(app.clone()));
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut running: HashMap<String, tauri::async_runtime::JoinHandle<()>> = HashMap::new();
@@ -645,6 +669,67 @@ fn instance_name(url: &str) -> String {
     instances::instance(url)
         .map(|i| i.name)
         .unwrap_or_else(|| url.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Scoped-token watch (D2)
+// ---------------------------------------------------------------------------
+
+/// One task for all instances: classify each configured instance's
+/// stored scoped token and emit [`EVENT_TOKEN_STATE`] when its state
+/// changes (plus the periodic refresh broadcast, see
+/// [`TOKEN_BROADCAST_EVERY_TICKS`]). Instances without a stored record
+/// produce no events: the pairing flow has its own surfacing. Renewal
+/// stays interactive by design; the app never stores the password, so
+/// there is no silent refresh and the shell links to login.html instead.
+async fn watch_tokens(app: AppHandle) {
+    let mut last: HashMap<String, &'static str> = HashMap::new();
+    let mut ticks: u32 = 0;
+    loop {
+        ticks += 1;
+        for url in instances::instances().iter().map(|i| i.url.clone()) {
+            let Some(state) = scoped_token_state(&app, &url).await else {
+                continue;
+            };
+            if should_broadcast(last.get(&url) != Some(&state), ticks) {
+                last.insert(url.clone(), state);
+                let _ = app.emit(
+                    EVENT_TOKEN_STATE,
+                    serde_json::json!({ "instanceUrl": url, "state": state }),
+                );
+            }
+        }
+        http::sleep(TOKEN_WATCH_INTERVAL).await;
+    }
+}
+
+/// The watchable state of an instance's stored scoped token; `None`
+/// when no record exists or the keychain read fails (nothing to
+/// surface; a record deleted by the bridge's invalidation routing
+/// already reported "invalidated").
+async fn scoped_token_state(app: &AppHandle, url: &str) -> Option<&'static str> {
+    match crate::token_store::get_token(app.clone(), url).await {
+        Ok(Some(record)) => Some(freshness_state(crate::token_store::freshness(
+            &record,
+            now_secs(),
+        ))),
+        _ => None,
+    }
+}
+
+/// The shell-facing name of a token freshness class.
+fn freshness_state(fresh: crate::token_store::TokenFreshness) -> &'static str {
+    match fresh {
+        crate::token_store::TokenFreshness::Fresh => "ok",
+        crate::token_store::TokenFreshness::Expiring => "expiring",
+        crate::token_store::TokenFreshness::Expired => "expired",
+    }
+}
+
+/// Broadcast decision: immediately on change, else on the periodic
+/// refresh tick so late-opening pages still learn the state.
+fn should_broadcast(changed: bool, ticks: u32) -> bool {
+    changed || ticks % TOKEN_BROADCAST_EVERY_TICKS == 0
 }
 
 /// One poll tick: fetch the session list, diff, notify, refresh the tray.
@@ -1347,5 +1432,21 @@ mod tests {
         assert!(!is_terminal("active"));
         assert!(!is_terminal("pending"));
         assert!(!is_terminal("disconnected"));
+    }
+
+    #[test]
+    fn freshness_maps_to_shell_state_names() {
+        use crate::token_store::TokenFreshness;
+        assert_eq!(freshness_state(TokenFreshness::Fresh), "ok");
+        assert_eq!(freshness_state(TokenFreshness::Expiring), "expiring");
+        assert_eq!(freshness_state(TokenFreshness::Expired), "expired");
+    }
+
+    #[test]
+    fn broadcast_fires_on_change_and_on_refresh_ticks() {
+        assert!(should_broadcast(true, 1));
+        assert!(!should_broadcast(false, 1));
+        assert!(should_broadcast(false, TOKEN_BROADCAST_EVERY_TICKS));
+        assert!(should_broadcast(false, TOKEN_BROADCAST_EVERY_TICKS * 3));
     }
 }

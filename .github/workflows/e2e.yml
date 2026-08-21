@@ -103,6 +103,16 @@ jobs:
           PERSEA_E2E_APPS_DIR: ../../src-tauri/target/debug
         run: node run-specs.js
 
+      - name: Upload the driver and app logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-${{ matrix.os }}
+          path: |
+            tests/e2e/tauri-driver.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Capture the canonical desktop screenshots (Linux)
         if: github.event_name == 'workflow_dispatch' && runner.os == 'Linux'
         working-directory: tests/e2e
