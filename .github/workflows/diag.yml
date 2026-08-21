@@ -46,15 +46,27 @@ jobs:
           Get-WinEvent -LogName Application -MaxEvents 15 -ErrorAction SilentlyContinue |
             ForEach-Object { Write-Host "---"; Write-Host "$($_.ProviderName) [$($_.Id)]"; Write-Host $_.Message }
 
-          Write-Host "=== import table audit ==="
+          Write-Host "=== embedded manifest check ==="
+          $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          Write-Host ("has <assembly marker: " + ($text -match '<assembly').ToString())
+          Write-Host ("has Common-Controls: " + ($text -match 'Common-Controls').ToString())
+
+      - name: Audit the import table against the runner's DLLs
+        working-directory: src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
           python -m pip install --quiet pefile
-          python - <<'PYEOF'
+          $py = @'
           import pefile, os
-          exe = r"${{ github.workspace }}\src-tauri\target\debug\deps"
-          exe = [os.path.join(exe, f) for f in os.listdir(exe) if f.startswith("persea_desktop_lib") and f.endswith(".exe")][0]
+          deps_dir = os.path.join(os.getcwd(), "target", "debug", "deps")
+          exe = [os.path.join(deps_dir, f) for f in os.listdir(deps_dir)
+                 if f.startswith("persea_desktop_lib") and f.endswith(".exe")][0]
           pe = pefile.PE(exe)
           windir = os.environ.get("WINDIR", "C:\\Windows")
-          search = [os.path.dirname(exe), os.path.join(windir, "System32"), os.path.join(windir, "SysWOW64"), windir]
+          search = [os.path.dirname(exe), os.path.join(windir, "System32"),
+                    os.path.join(windir, "SysWOW64"), windir]
           search += [p for p in os.environ.get("PATH", "").split(";") if p]
           problems = []
           for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []):
@@ -62,7 +74,7 @@ jobs:
               cands = [os.path.join(d, dll) for d in search]
               found = next((c for c in cands if os.path.exists(c)), None)
               if not found:
-                  problems.append(f"{dll}: DLL NOT FOUND in search path")
+                  problems.append(dll + ": DLL NOT FOUND in search path")
                   continue
               try:
                   dpe = pefile.PE(found, fast_load=True)
@@ -74,16 +86,12 @@ jobs:
                               exports.add(sym.name.decode())
                   for imp in entry.imports:
                       if imp.name and imp.name.decode() not in exports:
-                          problems.append(f"{dll}: MISSING EXPORT {imp.name.decode()}")
+                          problems.append(dll + ": MISSING EXPORT " + imp.name.decode())
               except Exception as e:
-                  problems.append(f"{dll}: parse error {e}")
+                  problems.append(dll + ": parse error " + str(e))
           print("PROBLEMS:" if problems else "NO MISSING IMPORTS")
           for pr in problems:
-              print(" ", pr)
-          PYEOF
-
-          Write-Host "=== embedded manifest check ==="
-          $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
-          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
-          Write-Host ("has <assembly marker: " + ($text -match '<assembly').ToString())
-          Write-Host ("has Common-Controls: " + ($text -match 'Common-Controls').ToString())
+              print("  ", pr)
+          '@
+          Set-Content -Path import_audit.py -Value $py
+          python import_audit.py
