@@ -19,8 +19,6 @@ mod transfer;
 mod tray;
 mod windows;
 
-use tauri::{WebviewUrl, WebviewWindowBuilder};
-
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -79,59 +77,10 @@ pub fn run() {
                 .map(|i| i.url.clone())
                 .collect();
             let default_url = origins.first().cloned().unwrap_or_default();
-            let _policy = navigation::NavigationPolicy::new(origins.clone(), Vec::new());
-            // tauri-driver (Windows e2e) needs the WebView2 DevTools port
-            // file in the DEFAULT user data folder: msedgedriver reads it
-            // from there. A custom per-instance data directory hides it
-            // ("DevToolsActivePort file doesn't exist"), so skip the
-            // custom directory under automation.
-            let automation = std::env::var("TAURI_WEBVIEW_AUTOMATION").as_deref() == Ok("true");
-            let mut builder =
-                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                    .title("Persea Desktop")
-                    .inner_size(1280.0, 800.0)
-                    .min_inner_size(800.0, 600.0)
-                    .center()
-                    .initialization_script(bridge::init_script());
-            if !automation {
-                let (store_id, data_dir) =
-                    windows::instance_webview_data(app.handle(), &default_url);
-                builder = builder.data_directory(data_dir);
-                if let Some(id) = store_id {
-                    builder = builder.data_store_identifier(id);
-                }
-            }
-            if automation {
-                // msedgedriver attaches over CDP: WebView2 only writes the
-                // DevToolsActivePort file when remote debugging is in the
-                // environment's browser args.
-                builder = builder.additional_browser_args("--remote-debugging-port=0");
-            } else if let Some(args) = platform::webview2_browser_args() {
-                builder = builder.additional_browser_args(&args);
-            }
-            if kiosk::is_active() {
-                builder = builder.devtools(false);
-            }
-            let builder = windows::lock_viewport_builder(builder, app.handle().clone());
-            #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
-            let main = builder.build()?;
-
-            // Linux: the tray and the in-window menu bar are unreliable
-            // on Wayland (no appindicator support), so closing the main
-            // window would strand the process with no visible way to
-            // quit. Quit for real on close; kiosk keeps its own
-            // prevent-close handler (registered at kiosk entry).
-            #[cfg(target_os = "linux")]
-            {
-                let app_handle = app.handle().clone();
-                main.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { .. } = event {
-                        if !crate::kiosk::is_active() {
-                            app_handle.exit(0);
-                        }
-                    }
-                });
-            }
+            // The main window is code-built (navigation lockdown, bridge
+            // init, downloads, per-instance webview store, Linux close
+            // policy); instance switches rebuild it via windows.rs.
+            let _main = windows::build_main_window(app.handle(), &default_url)?;
 
             // Apply the persisted untrusted-TLS policy to the shared
             // WebKitGTK web context now that the first webview exists
