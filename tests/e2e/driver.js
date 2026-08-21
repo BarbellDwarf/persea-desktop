@@ -68,33 +68,31 @@ function startDriver() {
 // Restart the app on macOS so the fresh process reads the store the spec
 // just seeded. The embedded WebDriver server survives session deletion,
 // so a stale instance would keep its old in-memory store otherwise.
-function restartApp() {
-  if (driverProcess) {
-    try {
-      driverProcess.kill();
-    } catch (_) {
-      // already gone
-    }
-    driverProcess = null;
-  }
-  const fs = require("fs");
-  const log = fs.openSync("tauri-driver.log", "w");
-  driverProcess = spawn(APP_PATH, [], {
-    env: { ...process.env, TAURI_WEBDRIVER_PORT: String(DRIVER_PORT) },
-    stdio: ["ignore", log, log],
-  });
+function waitForPort(acceptDeadlineMs, expect) {
+  // Polls the driver port until it accepts (`"open"`) or refuses
+  // (`"closed"`) connections. The closed wait matters after a kill: the
+  // dying app's socket can still accept for a moment, and a session
+  // built against it dies with ECONNREFUSED mid-spec.
   return new Promise((resolve, reject) => {
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + acceptDeadlineMs;
     const probe = () => {
       const net = require("net");
       const socket = net.connect(DRIVER_PORT, "127.0.0.1");
       socket.on("connect", () => {
         socket.destroy();
-        resolve();
+        if (expect === "open") {
+          resolve();
+        } else if (Date.now() > deadline) {
+          reject(new Error(`port ${DRIVER_PORT} is still in use; the previous app did not release it`));
+        } else {
+          setTimeout(probe, 250);
+        }
       });
       socket.on("error", () => {
         socket.destroy();
-        if (Date.now() > deadline) {
+        if (expect === "closed") {
+          resolve();
+        } else if (Date.now() > deadline) {
           const fs = require("fs");
           const tail = fs.existsSync("tauri-driver.log")
             ? fs.readFileSync("tauri-driver.log", "utf8").split("\n").slice(-10).join("\n")
@@ -109,9 +107,64 @@ function restartApp() {
   });
 }
 
+async function waitForExit(pid, timeoutMs) {
+  // The process is gone when kill(pid, 0) reports ESRCH. Waiting for the
+  // full exit (not just the socket closing) matters: a shutting-down app
+  // saves its instance store on the way out and would clobber a seed
+  // written too early (persea-desktop#104).
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch (_) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`app pid ${pid} did not exit within ${timeoutMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+async function restartApp() {
+  if (driverProcess) {
+    const pid = driverProcess.pid;
+    // SIGTERM first so a live app can shut down cleanly; if it is still
+    // holding the driver port after a short grace period, SIGKILL. The
+    // port MUST be released before the replacement spawns: a session
+    // attached to the dying app dies with ECONNREFUSED mid-spec.
+    try {
+      driverProcess.kill();
+    } catch (_) {
+      // already gone
+    }
+    await waitForPort(5000, "closed").catch(() => {});
+    try {
+      driverProcess.kill("SIGKILL");
+    } catch (_) {
+      // already gone
+    }
+    await waitForPort(10000, "closed").catch(() => {});
+    if (pid) {
+      await waitForExit(pid, 10000).catch(() => {});
+    }
+    driverProcess = null;
+  }
+  applyPendingSeed();
+  const fs = require("fs");
+  const log = fs.openSync("tauri-driver.log", "w");
+  driverProcess = spawn(APP_PATH, [], {
+    env: { ...process.env, TAURI_WEBDRIVER_PORT: String(DRIVER_PORT) },
+    stdio: ["ignore", log, log],
+  });
+  await waitForPort(20000, "open");
+}
+
 async function newSession() {
   if (IS_MACOS) {
     await restartApp();
+  } else {
+    applyPendingSeed();
   }
   const builder = new Builder()
     .usingServer(`http://127.0.0.1:${DRIVER_PORT}`)
@@ -191,7 +244,14 @@ function screenshot(driver, name) {
 
 // Pre-seed the shell's instance store before the app launches. The
 // navigation lockdown only allows origins present in the store.
-function seedInstances(instances) {
+//
+// The write is deferred to the next spawn: a still-shutting-down app
+// saves its own store on exit and would clobber a seed written before
+// it died (persea-desktop#104). newSession applies the seed after the
+// old process is gone and before the replacement spawns.
+let pendingSeed = null;
+
+function instanceStorePath() {
   const { homedir } = require("os");
   const { join } = require("path");
   const configDir = process.platform === "win32"
@@ -200,10 +260,20 @@ function seedInstances(instances) {
       ? join(homedir(), "Library", "Application Support", "dev.persea.desktop")
       : join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "dev.persea.desktop");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(
-    join(configDir, "instances.json"),
-    JSON.stringify({ instances, lastUsed: instances.find((i) => i.default)?.url || null }),
-  );
+  return join(configDir, "instances.json");
+}
+
+function seedInstances(instances) {
+  pendingSeed = JSON.stringify({
+    instances,
+    lastUsed: instances.find((i) => i.default)?.url || null,
+  });
+}
+
+function applyPendingSeed() {
+  if (pendingSeed === null) return;
+  writeFileSync(instanceStorePath(), pendingSeed);
+  pendingSeed = null;
 }
 
 module.exports = { startDriver, stopDriver, newSession, screenshot, seedInstances };
