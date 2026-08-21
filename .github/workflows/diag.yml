@@ -21,6 +21,30 @@ jobs:
         working-directory: src-tauri
         run: cargo test --lib --no-run
 
+      - name: Create the comctl32 v6 manifests (same as ci.yml)
+        working-directory: src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $manifest = @'
+          <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+          <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+            <dependency>
+              <dependentAssembly>
+                <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/>
+              </dependentAssembly>
+            </dependency>
+          </assembly>
+          '@
+          Get-ChildItem target/debug/deps/*.exe | ForEach-Object {
+            Set-Content -Path "$($_.FullName).manifest" -Value $manifest.TrimStart()
+            Write-Host "wrote $($_.FullName).manifest"
+          }
+          Get-ChildItem target/debug/deps/*.manifest | ForEach-Object {
+            Write-Host "--- $($_.Name) ($($_.Length) bytes)"
+            Get-Content $_.FullName -TotalCount 3 | Out-String | Write-Host
+          }
+
       - name: Run the test exe and capture every diagnostic
         working-directory: src-tauri
         shell: pwsh
