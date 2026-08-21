@@ -43,6 +43,30 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
         working-directory: src-tauri
+      - name: Give the windows test binaries a comctl32 v6 manifest
+        if: runner.os == 'Windows'
+        working-directory: src-tauri
+        shell: pwsh
+        run: |
+          # The lib test binary imports comctl32!TaskDialogIndirect, which
+          # exists only in comctl32 v6; without a manifest the loader binds
+          # System32's v5 and the exe dies with STATUS_ENTRYPOINT_NOT_FOUND.
+          # The app binary embeds its manifest via tauri_build — test
+          # binaries have none, so drop an external one beside each.
+          $manifest = @'
+          <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+          <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+            <dependency>
+              <dependentAssembly>
+                <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/>
+              </dependentAssembly>
+            </dependency>
+          </assembly>
+          '@
+          Get-ChildItem target/debug/deps/*.exe | ForEach-Object {
+            Set-Content -Path "$($_.FullName).manifest" -Value $manifest
+          }
+
       - name: test
         run: cargo test
         working-directory: src-tauri
